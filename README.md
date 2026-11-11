@@ -12,9 +12,14 @@ in a fullscreen WebView shell: fullscreen video support, file downloads, adaptiv
 - Package: `com.w2a.um1c`
 - Latest source: [`mk-flix-app/`](./mk-flix-app/)
 - Snapshot of the last CineJoy-branded release: [`cinejoy-v1.2.7/`](./cinejoy-v1.2.7/)
-- Build: run `build-apk.sh` inside the project folder (builds with the
-  Android SDK tools directly), or open in Android Studio (compileSdk 34,
-  Java 17)
+- Build: open in Android Studio (compileSdk 34, Java 17), or run
+  `build-apk.sh` inside the project folder for a debug APK built with the
+  Android SDK tools directly
+- Release APK: `assembleRelease` signs with the release key named in
+  `~/.gradle/gradle.properties` (`MKFLIX_RELEASE_STORE_FILE`,
+  `MKFLIX_RELEASE_STORE_PASSWORD`, `MKFLIX_RELEASE_KEY_ALIAS`,
+  `MKFLIX_RELEASE_KEY_PASSWORD`). The key never goes in the repo. Every
+  release must use the same key, or it won't install over earlier versions.
 
 ### 🖥️ MK-Flix Desktop (Windows and Linux) — v1.3.0
 Electron wrapper for the same site: portable Windows `.exe` (no installer)
