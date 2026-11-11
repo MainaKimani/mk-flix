@@ -62,7 +62,7 @@ install guide for end users.
 
 `dist-linux` uses electron-builder to make a `.deb` for Ubuntu/Debian.
 It installs to `/opt/MK-Flix` with an apps-menu entry and icon; install
-it with `sudo apt install ./MK-Flix_1.3.1_amd64.deb` and remove it with
+it with `sudo apt install ./MK-Flix_1.4.0_amd64.deb` and remove it with
 `sudo apt remove mk-flix`. Its install script also loads an AppArmor
 profile on Ubuntu 24.04, so the installed app needs no chrome-sandbox
 fix (that's only needed for `npm start` from source).

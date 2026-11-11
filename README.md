@@ -2,7 +2,7 @@
 
 App built by **Blendy Studio (MK)**.
 
-## 🎬 MK-Flix — v1.3.1
+## 🎬 MK-Flix — v1.4.0
 
 _MK-Flix: Powered by CineJoy. NutFlix just got better 😉_
 
@@ -11,13 +11,13 @@ in its own fullscreen window, without the ads and pop-ups.
 
 ### Download
 
-Latest release: **[v1.3.1](https://github.com/MainaKimani/mk-flix/releases/tag/v1.3.1)**
+Latest release: **[v1.4.0](https://github.com/MainaKimani/mk-flix/releases/tag/v1.4.0)**
 
 | Platform | Download | How to install |
 |---|---|---|
-| Android 7.0+ | [MK-Flix_1.3.1.apk](https://github.com/MainaKimani/mk-flix/releases/download/v1.3.1/MK-Flix_1.3.1.apk) | Open the file on your phone and allow installing from that source when asked. |
-| Windows 10/11 (64-bit) | [MK-Flix-Windows-x64.zip](https://github.com/MainaKimani/mk-flix/releases/download/v1.3.1/MK-Flix-Windows-x64.zip) | Extract the zip and run `MK-Flix.exe`. Step-by-step guide inside: `how-to-install.txt`. |
-| Ubuntu/Debian (64-bit) | [MK-Flix_1.3.1_amd64.deb](https://github.com/MainaKimani/mk-flix/releases/download/v1.3.1/MK-Flix_1.3.1_amd64.deb) | `sudo apt install ./MK-Flix_1.3.1_amd64.deb`, then open MK-Flix from your apps menu. |
+| Android 7.0+ and Android TV / Google TV | [MK-Flix_1.4.0.apk](https://github.com/MainaKimani/mk-flix/releases/download/v1.4.0/MK-Flix_1.4.0.apk) | Phone: open the file and allow installing from that source when asked. TV: use the Downloader app or `adb` ([how](./mk-flix-app/README.md#installing)). |
+| Windows 10/11 (64-bit) | [MK-Flix-Windows-x64.zip](https://github.com/MainaKimani/mk-flix/releases/download/v1.4.0/MK-Flix-Windows-x64.zip) | Extract the zip and run `MK-Flix.exe`. Step-by-step guide inside: `how-to-install.txt`. |
+| Ubuntu/Debian (64-bit) | [MK-Flix_1.4.0_amd64.deb](https://github.com/MainaKimani/mk-flix/releases/download/v1.4.0/MK-Flix_1.4.0_amd64.deb) | `sudo apt install ./MK-Flix_1.4.0_amd64.deb`, then open MK-Flix from your apps menu. |
 
 - **Upgrading from CineJoy on Android:** uninstall the CineJoy app first.
   MK-Flix is signed with a new key, so Android won't install it over CineJoy.
@@ -81,6 +81,17 @@ python3 branding/make-icons.py   # needs Pillow
 ```
 
 ## Releases
+
+### v1.4.0
+[Release page and downloads](https://github.com/MainaKimani/mk-flix/releases/tag/v1.4.0)
+
+- New: Android TV / Google TV. The same APK installs on TVs and shows up
+  in the Apps row with its own banner. Navigate with the remote's arrows
+  and OK; on a film, OK plays and pauses and left/right skip 10 seconds.
+  Hold OK for an on-screen pointer. See the
+  [Android README](./mk-flix-app/README.md#installing) for installing on a TV.
+- Android 1.4.0 installs as an update over 1.3.x; no need to uninstall.
+- Desktop: no changes beyond the version number.
 
 ### v1.3.1
 [Release page and downloads](https://github.com/MainaKimani/mk-flix/releases/tag/v1.3.1)

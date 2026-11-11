@@ -5,7 +5,7 @@ with ad blocking, MK-Flix branding and a proper error screen.
 
 - Package: `com.w2a.um1c` (kept from CineJoy; changing it would make Android
   treat MK-Flix as a different app)
-- Version: 1.3.1 (versionCode 131), set in `app/build.gradle.kts`
+- Version: 1.4.0 (versionCode 140), set in `app/build.gradle.kts`
 - Android 7.0 (API 24) and newer; targets and compiles against API 34
 
 ## What's where
