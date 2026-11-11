@@ -93,6 +93,17 @@ app.on('web-contents-created', (_event, contents) => {
     const host = hostOf(contents.getURL());
     if (host && isCineJoy(host) && footerJs) contents.executeJavaScript(footerJs).catch(() => {});
   });
+  // A page that fails to load would leave a blank black window, so show
+  // error.html instead, with the reason and a Retry button. ERR_ABORTED (-3)
+  // is skipped: it fires on redirects and when the user navigates away
+  // mid-load, which aren't failures. Failures of error.html itself (file:)
+  // are skipped too, so this can't loop.
+  contents.on('did-fail-load', (_event, code, desc, url, isMainFrame) => {
+    if (!isMainFrame || code === -3 || url.startsWith('file:')) return;
+    contents.loadFile(path.join(__dirname, 'error.html'), {
+      query: { url, code: String(code), desc },
+    });
+  });
   contents.setWindowOpenHandler(popupPolicy);
   contents.on('will-navigate', guardNavigation);
   contents.on('will-redirect', (event) => {

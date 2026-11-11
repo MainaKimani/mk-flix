@@ -26,6 +26,7 @@
       "mkflix-footer.js",
       "adblock-hosts.txt",
       "icon.png",
+      "error.html",
       "package.json"
     ],
     "directories": {

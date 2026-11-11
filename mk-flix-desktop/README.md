@@ -8,6 +8,8 @@ Portable Windows (x64) build — unzip and run, no installer needed.
 - `main.js` — app entry point: window setup, ad/tracker blocking, popup policy
 - `package.json` — project metadata and dev dependencies
 - `adblock-hosts.txt` — ad/tracker host blocklist (shared with the Android app)
+- `error.html` — shown instead of a blank window when cinejoy.pk can't load
+  (network block, offline, ...), with a Retry button
 - `icon.ico` — app icon (16–256 px), made from the Android launcher artwork
 
 ## Popup policy
@@ -59,8 +61,8 @@ Notes:
 - The exe isn't code-signed, so Windows SmartScreen warns on first run;
   `how-to-install.txt` tells users how to get past it.
 - `main.js` only uses Electron/Node built-ins, so the packaged app needs no
-  `node_modules`. It does need `mkflix-footer.js` and `adblock-hosts.txt`
-  next to it.
+  `node_modules`. It does need `mkflix-footer.js`, `adblock-hosts.txt`,
+  `error.html` and `icon.png` next to it.
 - On Ubuntu 24.04 and other distros that restrict unprivileged user
   namespaces, `npm start` aborts with a SUID sandbox error. Fix it after
   each install that downloads a new Electron:
