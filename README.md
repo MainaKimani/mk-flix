@@ -4,19 +4,19 @@ Apps built by **Vision**.
 
 ## Projects
 
-### 🎬 CineJoy — v1.2.7
-An Android app that wraps [cinejoy.pk](https://cinejoy.pk/) in a fullscreen
-WebView shell: fullscreen video support, file downloads, adaptive app icon
+### 🎬 MK-Flix (Android) — v1.3.0
+An Android app, powered by CineJoy, that wraps [cinejoy.pk](https://cinejoy.pk/)
+in a fullscreen WebView shell: fullscreen video support, file downloads, adaptive app icon
 (with Android 13+ themed-icon support), built-in ad/tracker blocker.
 
 - Package: `com.w2a.um1c`
 - Latest source: [`cinejoy-app/`](./cinejoy-app/)
-- Versioned snapshot: [`cinejoy-v1.2.7/`](./cinejoy-v1.2.7/)
+- Snapshot of the last CineJoy-branded release: [`cinejoy-v1.2.7/`](./cinejoy-v1.2.7/)
 - Build: run `build-apk.sh` inside the project folder (builds with the
   Android SDK tools directly), or open in Android Studio (compileSdk 34,
   Java 17)
 
-### 🖥️ CineJoy Desktop — Windows
+### 🖥️ MK-Flix Desktop (Windows) — v1.3.0
 Electron wrapper for the same site: portable `.exe` (no installer),
 built-in ad/tracker blocker, popup-ad lockdown.
 
@@ -32,9 +32,10 @@ built-in ad/tracker blocker, popup-ad lockdown.
   the GitHub web UI and attach the v1.2.7 APK there (the connected GitHub app
   can't publish releases or upload binary files itself).
 
-### 🖥️ CineJoy Desktop (Windows)
+### 🖥️ MK-Flix Desktop v1.3.0 (Windows)
 - Source: [`cinejoy-desktop/`](./cinejoy-desktop/)
-- Installable zip (`CineJoy-Windows-x64.zip`): attached to a GitHub Release
+- Build the zip with `npm run dist-win` in `cinejoy-desktop/`.
+- Installable zip (`MK-Flix-Windows-x64.zip`, includes `how-to-install.txt`): attached to a GitHub Release
   created manually in the GitHub web UI.
 
 ---

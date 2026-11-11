@@ -10,8 +10,8 @@ android {
         applicationId = "com.w2a.um1c"
         minSdk = 24
         targetSdk = 34
-        versionCode = 127
-        versionName = "1.2.7"
+        versionCode = 130
+        versionName = "1.3.0"
     }
 
     buildTypes {

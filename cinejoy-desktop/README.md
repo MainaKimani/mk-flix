@@ -1,4 +1,4 @@
-# 🖥️ CineJoy Desktop — Windows app
+# 🖥️ MK-Flix Desktop — Windows app
 
 Electron-based desktop client for [cinejoy.pk](https://cinejoy.pk/).
 Portable Windows (x64) build — unzip and run, no installer needed.
@@ -37,13 +37,19 @@ Node built into Electron.
 ```sh
 npm install
 npm start               # run locally
-npm run package-win     # build the Windows app into dist/
+npm run dist-win        # build dist/MK-Flix-Windows-x64.zip
 ```
 
+`dist-win` runs `build-win.sh`, which packages the app (`npm run
+package-win`, output in `dist/MK-Flix-win32-x64/`) and zips it as an
+`MK-Flix` folder holding `MK-Flix.exe` and `how-to-install.txt`, the
+install guide for end users.
+
 Notes:
-- `@electron/packager` needs Wine on Linux to stamp the exe icon via rcedit.
-  Alternative used here: assemble the win32 Electron dist manually and embed
-  the icon plus version metadata with `resedit-cli` (pure JS, no Wine).
+- No Wine needed: `@electron/packager` stamps the exe icon, name, version
+  and publisher with `resedit`, which is pure JavaScript.
+- The exe isn't code-signed, so Windows SmartScreen warns on first run;
+  `how-to-install.txt` tells users how to get past it.
 - `main.js` only uses Electron/Node built-ins, so the packaged app needs no
   `node_modules`. It does need `mkflix-footer.js` and `adblock-hosts.txt`
   next to it.
@@ -58,5 +64,5 @@ Notes:
 
 ## Releases
 
-Installable zips (`CineJoy-Windows-x64.zip`) are published through GitHub
+Installable zips (`MK-Flix-Windows-x64.zip`) are published through GitHub
 Releases, created manually in the GitHub web UI.

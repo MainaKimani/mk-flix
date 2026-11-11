@@ -1,0 +1,65 @@
+MK-Flix: Powered by CineJoy
+How to install on Windows
+===========================
+
+You need: Windows 10 or Windows 11 (64-bit) and an internet connection.
+MK-Flix doesn't need installing. You unzip it and run it.
+
+
+1. UNZIP IT
+-----------
+- Right-click MK-Flix-Windows-x64.zip and choose "Extract All...".
+- Pick a place to keep it, for example your Documents folder or
+  C:\Users\<your name>\Apps, and click "Extract".
+
+  Don't run MK-Flix from inside the zip without extracting it first.
+  It won't work properly that way.
+
+
+2. START IT
+-----------
+- Open the "MK-Flix" folder you just extracted.
+- Double-click MK-Flix.exe.
+
+
+3. IF WINDOWS SAYS "Windows protected your PC"
+----------------------------------------------
+This appears the first time because MK-Flix is a new app that hasn't
+been code-signed. To continue:
+- Click "More info".
+- Click "Run anyway".
+
+You only need to do this once.
+
+
+4. MAKE A SHORTCUT (optional)
+-----------------------------
+- Desktop: right-click MK-Flix.exe, choose "Show more options"
+  (Windows 11), then "Send to" > "Desktop (create shortcut)".
+- Taskbar: start MK-Flix, then right-click its icon on the taskbar
+  and choose "Pin to taskbar".
+
+
+UPDATING TO A NEW VERSION
+-------------------------
+Close MK-Flix, delete the old "MK-Flix" folder, and extract the new zip
+in the same place. Your sign-in and settings are kept.
+
+
+UNINSTALLING
+------------
+- Delete the "MK-Flix" folder, and any shortcuts you made.
+- To also remove your sign-in and settings, press Windows key + R,
+  type %APPDATA%\MK-Flix and press Enter, then delete that folder.
+
+
+GOOD TO KNOW
+------------
+- Press F11 or use the fullscreen button on a video to watch fullscreen.
+  Press Esc to leave fullscreen.
+- Press Alt to show the menu bar.
+- Ads and pop-ups are blocked automatically.
+- MK-Flix doesn't host any films or shows. It's a window onto cinejoy.pk.
+
+
+Enjoy! NutFlix just got better ;)

@@ -1,15 +1,16 @@
 {
   "name": "cinejoy-desktop",
-  "productName": "CineJoy",
-  "version": "1.2.7",
-  "description": "CineJoy desktop app for Windows — watch cinejoy.pk on the big screen",
+  "productName": "MK-Flix",
+  "version": "1.3.0",
+  "description": "MK-Flix desktop app for Windows, powered by CineJoy: watch cinejoy.pk on the big screen",
   "main": "main.js",
   "engines": {
     "node": ">=22.12.0"
   },
   "scripts": {
     "start": "electron .",
-    "package-win": "electron-packager . CineJoy --platform=win32 --arch=x64 --icon=icon.ico --overwrite --out=dist"
+    "package-win": "electron-packager . MK-Flix --platform=win32 --arch=x64 --icon=icon.ico --ignore='^/(how-to-install\\.txt|build-win\\.sh|README\\.md|\\.nvmrc|node_modules)($|/)' --win32metadata.CompanyName=MK-Flix --app-copyright='Copyright (C) 2026 MK-Flix' --overwrite --out=dist",
+    "dist-win": "./build-win.sh"
   },
   "devDependencies": {
     "@electron/packager": "^20.3.0",
