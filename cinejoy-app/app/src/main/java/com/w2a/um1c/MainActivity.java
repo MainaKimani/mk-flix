@@ -31,6 +31,7 @@ import android.widget.Toast;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.Collections;
@@ -52,6 +53,9 @@ public class MainActivity extends Activity {
     // Download waiting on the storage permission (Android 7–9 only).
     private DownloadManager.Request pendingDownload;
     private final Set<String> adHosts = new HashSet<>();
+    // Replaces cinejoy.pk's footer with the MK-Flix lines and support details.
+    // Shared with the desktop app; see assets/mkflix-footer.js for how and why.
+    private String footerJs = "";
 
     private static final int REQUEST_STORAGE_PERMISSION = 1;
 
@@ -64,6 +68,7 @@ public class MainActivity extends Activity {
 
         webView = findViewById(R.id.webview);
         loadAdBlockList();
+        footerJs = readAsset("mkflix-footer.js");
 
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -110,6 +115,10 @@ public class MainActivity extends Activity {
                 super.onPageFinished(view, url);
                 try {
                     view.evaluateJavascript(adCleanupJs(), null);
+                    String host = Uri.parse(url).getHost();
+                    if (!footerJs.isEmpty() && host != null && (host.equals("cinejoy.pk") || host.endsWith(".cinejoy.pk"))) {
+                        view.evaluateJavascript(footerJs, null);
+                    }
                 } catch (Exception ignored) {
                 }
             }
@@ -247,6 +256,21 @@ public class MainActivity extends Activity {
         } else {
             Toast.makeText(getApplicationContext(),
                     "Storage permission is needed to download files", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    /** Read a text file shipped in assets, or "" if it can't be read. */
+    private String readAsset(String name) {
+        try (InputStream is = getAssets().open(name)) {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = is.read(buf)) > 0) {
+                out.write(buf, 0, n);
+            }
+            return out.toString("UTF-8");
+        } catch (Exception e) {
+            return "";
         }
     }
 

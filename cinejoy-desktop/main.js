@@ -77,10 +77,21 @@ function guardNavigation(event, url) {
   if (host && !isAdHost(url) && isTrustedExternal(url, host)) shell.openExternal(url);
 }
 
+// Replaces cinejoy.pk's footer with the MK-Flix lines and support details.
+// See mkflix-footer.js (shared with the Android app) for how and why.
+let footerJs = '';
+try {
+  footerJs = fs.readFileSync(path.join(__dirname, 'mkflix-footer.js'), 'utf8');
+} catch (e) { /* footer stays as the site made it */ }
+
 // Apply the popup and navigation rules to every window, including popup
 // windows cinejoy.pk itself opens. Setting them on the main window alone
 // would leave those popups free to open anything.
 app.on('web-contents-created', (_event, contents) => {
+  contents.on('dom-ready', () => {
+    const host = hostOf(contents.getURL());
+    if (host && isCineJoy(host) && footerJs) contents.executeJavaScript(footerJs).catch(() => {});
+  });
   contents.setWindowOpenHandler(popupPolicy);
   contents.on('will-navigate', guardNavigation);
   contents.on('will-redirect', (event, url, _isInPlace, isMainFrame) => {
