@@ -1,4 +1,4 @@
-package com.blendystudio.mkflix;
+package com.w2a.um1c;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
@@ -14,7 +14,6 @@ import android.net.Uri;
 import android.net.http.SslError;
 import android.os.Build;
 import android.os.Bundle;
-import android.window.OnBackInvokedDispatcher;
 import android.os.Environment;
 import android.view.View;
 import android.view.ViewGroup;
@@ -44,7 +43,6 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.Locale;
 import java.util.Set;
 
 public class MainActivity extends Activity {
@@ -93,12 +91,6 @@ public class MainActivity extends Activity {
 
         webView = findViewById(R.id.webview);
         loadAdBlockList();
-
-        // Back on Android 13+ (see onBackPressed for older versions).
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
-                    OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::handleBack);
-        }
         footerJs = readAsset("mkflix-footer.js");
         String logoCss = readAsset("mkflix-logo.css");
         if (!logoCss.isEmpty()) {
@@ -116,10 +108,9 @@ public class MainActivity extends Activity {
         settings.setLoadsImagesAutomatically(true);
         settings.setSupportMultipleWindows(false);
         settings.setJavaScriptCanOpenWindowsAutomatically(false);
-        // A secure (https) page may not load insecure (http) content. The
-        // manifest already blocks cleartext traffic, so this mostly makes the
-        // rule explicit; ALWAYS_ALLOW is a red flag for app scanners.
-        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        }
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -381,7 +372,7 @@ public class MainActivity extends Activity {
              BufferedReader br = new BufferedReader(new InputStreamReader(is))) {
             String line;
             while ((line = br.readLine()) != null) {
-                line = line.trim().toLowerCase(Locale.ROOT);
+                line = line.trim().toLowerCase();
                 if (!line.isEmpty() && !line.startsWith("#")) {
                     adHosts.add(line);
                 }
@@ -397,8 +388,7 @@ public class MainActivity extends Activity {
             if (host == null) {
                 return false;
             }
-            // Locale.ROOT: in e.g. Turkish, "I".toLowerCase() is a dotless ı.
-            String domain = host.toLowerCase(Locale.ROOT);
+            String domain = host.toLowerCase();
             while (true) {
                 if (adHosts.contains(domain)) {
                     return true;
@@ -515,21 +505,8 @@ public class MainActivity extends Activity {
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
     }
 
-    /**
-     * Back before Android 13. From 13 on, Back arrives through the
-     * OnBackInvokedCallback registered in onCreate instead; apps targeting
-     * Android 16 no longer get this call there at all.
-     */
-    // Lint's GestureBackNavigation flags any onBackPressed override. Here it
-    // only runs below Android 13; 13+ uses the callback lint asks for.
     @Override
-    @SuppressWarnings("deprecation")
-    @SuppressLint("GestureBackNavigation")
     public void onBackPressed() {
-        handleBack();
-    }
-
-    private void handleBack() {
         if (customView != null) {
             // Exit fullscreen video first
             chromeClient.onHideCustomView();
@@ -537,20 +514,6 @@ public class MainActivity extends Activity {
             backFromErrorPage();
         } else if (webView != null && webView.canGoBack()) {
             webView.goBack();
-        } else {
-            leaveApp();
-        }
-    }
-
-    /**
-     * Nothing left to go back to. On Android 13+ our back callback has taken
-     * over Back, so do what the system would: since Android 12, Back on an
-     * app's root screen sends it to the background rather than closing it.
-     */
-    @SuppressWarnings("deprecation")
-    private void leaveApp() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            moveTaskToBack(true);
         } else {
             super.onBackPressed();
         }
@@ -572,7 +535,7 @@ public class MainActivity extends Activity {
                 return;
             }
         }
-        leaveApp();
+        super.onBackPressed();
     }
 
     /**

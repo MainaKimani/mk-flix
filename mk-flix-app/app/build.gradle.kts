@@ -13,15 +13,15 @@ plugins {
 val releaseStoreFile = providers.gradleProperty("MKFLIX_RELEASE_STORE_FILE").orNull
 
 android {
-    namespace = "com.blendystudio.mkflix"
-    compileSdk = 36
+    namespace = "com.w2a.um1c"
+    compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.blendystudio.mkflix"
+        applicationId = "com.w2a.um1c"
         minSdk = 24
-        targetSdk = 36
-        versionCode = 131
-        versionName = "1.3.1"
+        targetSdk = 34
+        versionCode = 130
+        versionName = "1.3.0"
     }
 
     signingConfigs {
