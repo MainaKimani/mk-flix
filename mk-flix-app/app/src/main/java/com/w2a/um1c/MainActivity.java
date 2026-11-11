@@ -115,13 +115,15 @@ public class MainActivity extends Activity {
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                return handleUrl(request.getUrl().toString());
+                return handleUrl(request.getUrl().toString(),
+                        request.isForMainFrame(), request.hasGesture());
             }
 
             @Override
             @SuppressWarnings("deprecation")
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                return handleUrl(url);
+                // Only called before Android 7 (API 24), below our minSdk.
+                return handleUrl(url, true, false);
             }
 
             @Override
@@ -416,8 +418,20 @@ public class MainActivity extends Activity {
     }
 
     /**
+     * Ad-network "click-catchers": a transparent div covering the whole
+     * screen at the top z-index (2147483647), added a few seconds after the
+     * page loads. While it's there every swipe hits it instead of the page,
+     * and a tap on it fires the ad's redirect. This rule lets touches pass
+     * through it. Its inline style isn't !important, so this wins.
+     */
+    private static final String CLICK_CATCHER_CSS =
+            "html>div[style*=\"2147483647\"],body>div[style*=\"2147483647\"]"
+            + "{pointer-events:none!important}";
+
+    /**
      * Cosmetic cleanup: remove ad iframes/embeds served from blocked hosts so
-     * invisible ad containers can't sit over the page and swallow taps/swipes.
+     * invisible ad containers can't sit over the page and swallow taps/swipes,
+     * and neutralise click-catcher overlays (see CLICK_CATCHER_CSS).
      */
     private String adCleanupJs() {
         StringBuilder sb = new StringBuilder();
@@ -434,27 +448,55 @@ public class MainActivity extends Activity {
         sb.append("for(var i=0;i<H.length;i++){if(u.indexOf(H[i])>=0)return true;}return false;}");
         sb.append("function clean(){var q=document.querySelectorAll('iframe,frame,embed,object');");
         sb.append("for(var i=0;i<q.length;i++){try{if(bad(q[i].src))q[i].remove();}catch(e){}}}");
+        sb.append("if(!document.getElementById('mkflix-adguard')){var s=document.createElement('style');");
+        sb.append("s.id='mkflix-adguard';s.textContent='").append(CLICK_CATCHER_CSS).append("';");
+        sb.append("(document.head||document.documentElement).appendChild(s);}");
         sb.append("clean();setTimeout(clean,2000);})()");
         return sb.toString();
     }
 
+    // Sites that may open in their own app or the browser when the user taps
+    // a link to them (e.g. a trailer). Same list as the desktop app.
+    private static final String[] EXTERNAL_ALLOW = {"youtube.com", "youtu.be", "vimeo.com"};
+
     /**
-     * Route non-web URLs (intent://, market://, tel:, ...) to an external app
-     * when one can handle them; otherwise swallow them so the WebView never
-     * shows an ERR_UNKNOWN_URL_SCHEME page.
+     * Navigation policy, matching the desktop app. Ad scripts on the site
+     * try to escape the app: they redirect the page to an ad, or hand an
+     * intent:// link to Chrome, often from a tap on an invisible overlay or
+     * with no tap at all.
+     *
+     * - Pages: only cinejoy.pk loads in the app. A tapped link to YouTube or
+     *   Vimeo opens in its app or the browser; anything else is dropped.
+     *   Embedded players (sub-frames) are not affected.
+     * - Other apps (tel:, Play Store, intent:, ...): only for a link the user
+     *   tapped, and never for intents that just open a web page in a browser,
+     *   which is how ads escape to Chrome. If nothing can handle the link it
+     *   is swallowed, so the WebView never shows ERR_UNKNOWN_URL_SCHEME.
      *
      * Intents built from a web page are untrusted, so they are limited to
      * what a browser could open: BROWSABLE activities only, with any explicit
      * component or selector stripped. Without this a page could launch
      * arbitrary exported activities in other apps.
      */
-    private boolean handleUrl(String url) {
+    private boolean handleUrl(String url, boolean mainFrame, boolean userTapped) {
         if (url == null) {
             return true;
         }
         if (isWebUrl(url)) {
-            loadingUrl = url; // before onPageStarted, which a fast SSL failure can beat
-            return false; // load in the WebView
+            if (!mainFrame) {
+                return false; // embedded player or other sub-frame
+            }
+            if (isCineJoyUrl(url)) {
+                loadingUrl = url; // before onPageStarted, which a fast SSL failure can beat
+                return false; // load in the WebView
+            }
+            if (userTapped && isExternalAllowed(url)) {
+                openExternally(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+            }
+            return true; // off-site: never loads in the app
+        }
+        if (!userTapped) {
+            return true; // other apps open only from a real tap
         }
         Intent intent;
         try {
@@ -466,25 +508,60 @@ public class MainActivity extends Activity {
         } catch (Exception e) {
             return true;
         }
+        // An intent whose data is a web address just opens a page in some app,
+        // normally Chrome (e.g. intent://ad.example#Intent;scheme=https;
+        // package=com.android.chrome;end). That's the ad escape route; real
+        // app links (tel:, market:, an app's own scheme) aren't http(s).
+        String dataScheme = intent.getScheme();
+        if ("http".equalsIgnoreCase(dataScheme) || "https".equalsIgnoreCase(dataScheme)) {
+            return true;
+        }
+
+        if (!openExternally(intent)) {
+            // No app installed: honour the page's web fallback, if it's on cinejoy.pk.
+            String fallback = intent.getStringExtra("browser_fallback_url");
+            if (isCineJoyUrl(fallback)) {
+                loadingUrl = fallback;
+                webView.loadUrl(fallback);
+            }
+        }
+        return true; // consumed
+    }
+
+    /**
+     * Launch an intent from a web page in another app, limited to BROWSABLE
+     * activities with any explicit component or selector stripped. Returns
+     * false if no app can handle it.
+     */
+    private boolean openExternally(Intent intent) {
         intent.addCategory(Intent.CATEGORY_BROWSABLE);
         intent.setComponent(null);
         intent.setSelector(null);
-
         // Attempt the launch instead of checking resolveActivity() first: on
         // Android 11+ package visibility rules make resolveActivity() return
         // null for most apps unless they are declared in <queries>.
         try {
             startActivity(intent);
+            return true;
         } catch (ActivityNotFoundException e) {
-            // No app installed: honour the page's web fallback if it gave one.
-            String fallback = intent.getStringExtra("browser_fallback_url");
-            if (fallback != null
-                    && (fallback.startsWith("https://") || fallback.startsWith("http://"))) {
-                webView.loadUrl(fallback);
-            }
-        } catch (Exception ignored) {
+            return false;
+        } catch (Exception e) {
+            return true; // couldn't launch for another reason; don't fall back
         }
-        return true; // consumed
+    }
+
+    private static boolean isExternalAllowed(String url) {
+        String host = Uri.parse(url).getHost();
+        if (host == null) {
+            return false;
+        }
+        host = host.toLowerCase(java.util.Locale.ROOT);
+        for (String d : EXTERNAL_ALLOW) {
+            if (host.equals(d) || host.endsWith("." + d)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void hideSystemUi() {

@@ -102,3 +102,8 @@ branch.io
 kochava.com
 tenjin.io
 singular.net
+
+# Pop-under ad tag cinejoy.pk loads (llvpn.com/tag.min.js). It lays a
+# transparent full-screen click-catcher over the page that blocks swiping
+# and sends taps to ads, including out to Chrome on Android.
+llvpn.com
