@@ -70,7 +70,8 @@ function popupPolicy({ url, disposition }) {
 // cinejoy.pk loads in the window; trusted sites go to the default browser.
 // Embedded players in iframes are not affected — this only checks top-level
 // page loads.
-function guardNavigation(event, url) {
+function guardNavigation(event) {
+  const { url } = event;
   const host = hostOf(url);
   if (host && isCineJoy(host)) return;
   event.preventDefault();
@@ -94,8 +95,8 @@ app.on('web-contents-created', (_event, contents) => {
   });
   contents.setWindowOpenHandler(popupPolicy);
   contents.on('will-navigate', guardNavigation);
-  contents.on('will-redirect', (event, url, _isInPlace, isMainFrame) => {
-    if (isMainFrame) guardNavigation(event, url);
+  contents.on('will-redirect', (event) => {
+    if (event.isMainFrame) guardNavigation(event);
   });
 });
 

@@ -1,1 +1,18 @@
-{"description":"CineJoy desktop app for Windows — watch cinejoy.pk on the big screen","devDependencies":{"electron":"^38.0.0","electron-packager":"^17.1.2"},"main":"main.js","name":"cinejoy-desktop","productName":"CineJoy","scripts":{"package-win":"electron-packager . CineJoy --platform=win32 --arch=x64 --icon=icon.ico --overwrite --out=dist"},"version":"1.2.7"}
+{
+  "name": "cinejoy-desktop",
+  "productName": "CineJoy",
+  "version": "1.2.7",
+  "description": "CineJoy desktop app for Windows — watch cinejoy.pk on the big screen",
+  "main": "main.js",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "start": "electron .",
+    "package-win": "electron-packager . CineJoy --platform=win32 --arch=x64 --icon=icon.ico --overwrite --out=dist"
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "electron": "^45.3.0"
+  }
+}

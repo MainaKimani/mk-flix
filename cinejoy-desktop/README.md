@@ -30,19 +30,31 @@ Electron would otherwise grant them all without asking.
 
 ## Build
 
-Requires Node.js:
+Requires Node.js 22.12 or newer (`.nvmrc` pins 22, so `nvm use` picks it).
+Node is only needed for installing and packaging; the app runs on the
+Node built into Electron.
 
 ```sh
-npm install --ignore-scripts
-npx electron-packager . CineJoy --platform=win32 --arch=x64 --icon=icon.ico --overwrite --out=dist
+npm install
+npm start               # run locally
+npm run package-win     # build the Windows app into dist/
 ```
 
 Notes:
-- `electron-packager` needs Wine on Linux to stamp the exe icon via rcedit.
+- `@electron/packager` needs Wine on Linux to stamp the exe icon via rcedit.
   Alternative used here: assemble the win32 Electron dist manually and embed
   the icon plus version metadata with `resedit-cli` (pure JS, no Wine).
 - `main.js` only uses Electron/Node built-ins, so the packaged app needs no
-  `node_modules`.
+  `node_modules`. It does need `mkflix-footer.js` and `adblock-hosts.txt`
+  next to it.
+- On Ubuntu 24.04 and other distros that restrict unprivileged user
+  namespaces, `npm start` aborts with a SUID sandbox error. Fix it after
+  each install that downloads a new Electron:
+
+  ```sh
+  sudo chown root:root node_modules/electron/dist/chrome-sandbox
+  sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
+  ```
 
 ## Releases
 
