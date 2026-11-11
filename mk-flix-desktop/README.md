@@ -1,4 +1,4 @@
-# 🖥️ MK-Flix Desktop — Windows app
+# 🖥️ MK-Flix Desktop — Windows and Linux app
 
 Electron-based desktop client for [cinejoy.pk](https://cinejoy.pk/).
 Portable Windows (x64) build — unzip and run, no installer needed.
@@ -38,12 +38,20 @@ Node built into Electron.
 npm install
 npm start               # run locally
 npm run dist-win        # build dist/MK-Flix-Windows-x64.zip
+npm run dist-linux      # build dist/MK-Flix_1.3.0_amd64.deb
 ```
 
 `dist-win` runs `build-win.sh`, which packages the app (`npm run
 package-win`, output in `dist/MK-Flix-win32-x64/`) and zips it as an
 `MK-Flix` folder holding `MK-Flix.exe` and `how-to-install.txt`, the
 install guide for end users.
+
+`dist-linux` uses electron-builder to make a `.deb` for Ubuntu/Debian.
+It installs to `/opt/MK-Flix` with an apps-menu entry and icon; install
+it with `sudo apt install ./MK-Flix_1.3.0_amd64.deb` and remove it with
+`sudo apt remove mk-flix`. Its install script also loads an AppArmor
+profile on Ubuntu 24.04, so the installed app needs no chrome-sandbox
+fix (that's only needed for `npm start` from source).
 
 Notes:
 - No Wine needed: `@electron/packager` stamps the exe icon, name, version

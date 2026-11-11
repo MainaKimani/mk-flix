@@ -16,8 +16,9 @@ in a fullscreen WebView shell: fullscreen video support, file downloads, adaptiv
   Android SDK tools directly), or open in Android Studio (compileSdk 34,
   Java 17)
 
-### 🖥️ MK-Flix Desktop (Windows) — v1.3.0
-Electron wrapper for the same site: portable `.exe` (no installer),
+### 🖥️ MK-Flix Desktop (Windows and Linux) — v1.3.0
+Electron wrapper for the same site: portable Windows `.exe` (no installer)
+and an Ubuntu/Debian `.deb`,
 built-in ad/tracker blocker, popup-ad lockdown.
 
 - Source: [`mk-flix-desktop/`](./mk-flix-desktop/)
@@ -38,7 +39,8 @@ built-in ad/tracker blocker, popup-ad lockdown.
 
 ### 🖥️ MK-Flix Desktop v1.3.0 (Windows)
 - Source: [`mk-flix-desktop/`](./mk-flix-desktop/)
-- Build the zip with `npm run dist-win` in `mk-flix-desktop/`.
+- Build the zip with `npm run dist-win` in `mk-flix-desktop/`, and the
+  Linux package (`MK-Flix_1.3.0_amd64.deb`) with `npm run dist-linux`.
 - Installable zip (`MK-Flix-Windows-x64.zip`, includes `how-to-install.txt`): attached to a GitHub Release
   created manually in the GitHub web UI.
 

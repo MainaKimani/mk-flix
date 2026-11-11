@@ -135,7 +135,8 @@ function createWindow() {
     minHeight: 600,
     autoHideMenuBar: true,
     title: APP_TITLE,
-    icon: path.join(__dirname, 'icon.ico'),
+    // Windows uses the multi-size .ico; Linux can't load .ico for window icons.
+    icon: path.join(__dirname, process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
     backgroundColor: '#000000',
   });
 

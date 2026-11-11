@@ -2,7 +2,13 @@
   "name": "mk-flix-desktop",
   "productName": "MK-Flix",
   "version": "1.3.0",
-  "description": "MK-Flix desktop app for Windows, powered by CineJoy: watch cinejoy.pk on the big screen",
+  "description": "MK-Flix desktop app for Windows and Linux, powered by CineJoy: watch cinejoy.pk on the big screen",
+  "author": {
+    "name": "MK-Flix",
+    "email": "alexroymauk@gmail.com"
+  },
+  "homepage": "https://github.com/whytechofficial/CineJoy",
+  "desktopName": "mk-flix.desktop",
   "main": "main.js",
   "engines": {
     "node": ">=22.12.0"
@@ -10,10 +16,46 @@
   "scripts": {
     "start": "electron .",
     "package-win": "electron-packager . MK-Flix --platform=win32 --arch=x64 --icon=icon.ico --ignore='^/(how-to-install\\.txt|build-win\\.sh|README\\.md|\\.nvmrc|node_modules)($|/)' --win32metadata.CompanyName=MK-Flix --app-copyright='Copyright (C) 2026 MK-Flix' --overwrite --out=dist",
-    "dist-win": "./build-win.sh"
+    "dist-win": "./build-win.sh",
+    "dist-linux": "electron-builder --linux deb"
+  },
+  "build": {
+    "appId": "com.mkflix.desktop",
+    "files": [
+      "main.js",
+      "mkflix-footer.js",
+      "adblock-hosts.txt",
+      "icon.png",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "linux": {
+      "target": [
+        "deb"
+      ],
+      "executableName": "mk-flix",
+      "icon": "icon.png",
+      "category": "AudioVideo",
+      "synopsis": "MK-Flix: Powered by CineJoy",
+      "desktop": {
+        "entry": {
+          "Name": "MK-Flix",
+          "GenericName": "Video streaming",
+          "Comment": "Watch cinejoy.pk, ad-free, in its own window"
+        }
+      },
+      "artifactName": "${productName}_${version}_${arch}.${ext}",
+      "syncDesktopName": true
+    },
+    "deb": {
+      "packageName": "mk-flix"
+    }
   },
   "devDependencies": {
     "@electron/packager": "^20.3.0",
-    "electron": "^45.3.0"
+    "electron": "^45.3.0",
+    "electron-builder": "^26.18.0"
   }
 }
