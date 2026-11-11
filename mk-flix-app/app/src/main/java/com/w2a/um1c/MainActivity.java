@@ -29,6 +29,8 @@ import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.Toast;
 
+import org.json.JSONObject;
+
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -53,8 +55,13 @@ public class MainActivity extends Activity {
     // Download waiting on the storage permission (Android 7–9 only).
     private DownloadManager.Request pendingDownload;
     private final Set<String> adHosts = new HashSet<>();
-    // Replaces cinejoy.pk's footer with the MK-Flix lines and support details.
-    // Shared with the desktop app; see assets/mkflix-footer.js for how and why.
+    // MK-Flix branding on cinejoy.pk, shared with the desktop app:
+    // - logoJs adds assets/mkflix-logo.css, which draws the MK-Flix icon in
+    //   place of the site's header logo. It runs as soon as a page is about to
+    //   become visible, so the old logo doesn't show first.
+    // - footerJs (assets/mkflix-footer.js) replaces the site's footer once
+    //   the page has loaded.
+    private String logoJs = "";
     private String footerJs = "";
 
     private static final int REQUEST_STORAGE_PERMISSION = 1;
@@ -69,6 +76,14 @@ public class MainActivity extends Activity {
         webView = findViewById(R.id.webview);
         loadAdBlockList();
         footerJs = readAsset("mkflix-footer.js");
+        String logoCss = readAsset("mkflix-logo.css");
+        if (!logoCss.isEmpty()) {
+            // JSONObject.quote turns the CSS into a safe JavaScript string literal.
+            logoJs = "(function(){if(document.getElementById('mkflix-logo-style'))return;"
+                    + "var s=document.createElement('style');s.id='mkflix-logo-style';"
+                    + "s.textContent=" + JSONObject.quote(logoCss) + ";"
+                    + "(document.head||document.documentElement).appendChild(s);})()";
+        }
 
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -111,13 +126,28 @@ public class MainActivity extends Activity {
             }
 
             @Override
+            public void onPageCommitVisible(WebView view, String url) {
+                super.onPageCommitVisible(view, url);
+                // Earliest point the new page can take a script, before it is drawn.
+                if (!logoJs.isEmpty() && isCineJoyUrl(url)) {
+                    view.evaluateJavascript(logoJs, null);
+                }
+            }
+
+            @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 try {
                     view.evaluateJavascript(adCleanupJs(), null);
-                    String host = Uri.parse(url).getHost();
-                    if (!footerJs.isEmpty() && host != null && (host.equals("cinejoy.pk") || host.endsWith(".cinejoy.pk"))) {
-                        view.evaluateJavascript(footerJs, null);
+                    if (isCineJoyUrl(url)) {
+                        // Logo again in case commit-visible was skipped; it
+                        // checks its own id, so running twice is harmless.
+                        if (!logoJs.isEmpty()) {
+                            view.evaluateJavascript(logoJs, null);
+                        }
+                        if (!footerJs.isEmpty()) {
+                            view.evaluateJavascript(footerJs, null);
+                        }
                     }
                 } catch (Exception ignored) {
                 }
@@ -257,6 +287,11 @@ public class MainActivity extends Activity {
             Toast.makeText(getApplicationContext(),
                     "Storage permission is needed to download files", Toast.LENGTH_LONG).show();
         }
+    }
+
+    private static boolean isCineJoyUrl(String url) {
+        String host = url == null ? null : Uri.parse(url).getHost();
+        return host != null && (host.equals("cinejoy.pk") || host.endsWith(".cinejoy.pk"));
     }
 
     /** Read a text file shipped in assets, or "" if it can't be read. */

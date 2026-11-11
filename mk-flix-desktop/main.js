@@ -1,4 +1,4 @@
-const { app, BrowserWindow, session, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, session, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -78,12 +78,23 @@ function guardNavigation(event) {
   if (host && !isAdHost(url) && isTrustedExternal(url, host)) shell.openExternal(url);
 }
 
-// Replaces cinejoy.pk's footer with the MK-Flix lines and support details.
-// See mkflix-footer.js (shared with the Android app) for how and why.
-let footerJs = '';
-try {
-  footerJs = fs.readFileSync(path.join(__dirname, 'mkflix-footer.js'), 'utf8');
-} catch (e) { /* footer stays as the site made it */ }
+// MK-Flix branding on cinejoy.pk, shared with the Android app:
+// - mkflix-logo.css draws the MK-Flix icon in place of the site's header
+//   logo. preload.js applies it before the page's first paint, fetching it
+//   from here over IPC because preloads can't read files.
+// - mkflix-footer.js replaces the site's footer, once the page's DOM is ready.
+function readOptional(file) {
+  try {
+    return fs.readFileSync(path.join(__dirname, file), 'utf8');
+  } catch (e) {
+    return ''; // the site's own branding stays
+  }
+}
+const logoCss = readOptional('mkflix-logo.css');
+const footerJs = readOptional('mkflix-footer.js');
+ipcMain.on('mkflix:logo-css', (event) => {
+  event.returnValue = logoCss;
+});
 
 // Apply the popup and navigation rules to every window, including popup
 // windows cinejoy.pk itself opens. Setting them on the main window alone
@@ -149,6 +160,8 @@ function createWindow() {
     // Windows uses the multi-size .ico; Linux can't load .ico for window icons.
     icon: path.join(__dirname, process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
     backgroundColor: '#000000',
+    // Popups the site opens inherit these, preload included.
+    webPreferences: { preload: path.join(__dirname, 'preload.js') },
   });
 
   win.loadURL(HOME_URL);

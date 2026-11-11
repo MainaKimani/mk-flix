@@ -1,6 +1,6 @@
-# Vision Creates
+# Blendy Studio
 
-Apps built by **Vision**. 
+Apps built by **Blendy Studio (MK)**. 
 
 ## Projects
 
@@ -25,6 +25,16 @@ built-in ad/tracker blocker, popup-ad lockdown.
 - Installable zip: published via GitHub Releases (attached manually in the
   GitHub web UI)
 
+## Branding
+
+The app icon's master artwork is [`branding/mkflix-icon-1024.png`](./branding/).
+Every icon size for both apps (Windows `.ico`, Linux `.png`, Android launcher,
+round, adaptive and themed icons) is generated from it:
+
+```sh
+python3 branding/make-icons.py   # needs Pillow
+```
+
 ## Releases
 
 ### 🎬 MK-Flix v1.3.0 (Android)
@@ -46,4 +56,4 @@ built-in ad/tracker blocker, popup-ad lockdown.
 
 ---
 
-_Built with care by Vision 🤖_
+_Built with care by Maina Kimani 🤖_
