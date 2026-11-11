@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell } = require('electron');
+const { app, BrowserWindow, session, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -28,6 +28,85 @@ function isAdHost(url) {
   }
 }
 
+// Sites that may open in the user's default browser (e.g. a trailer).
+const EXTERNAL_ALLOW = ['youtube.com', 'youtu.be', 'vimeo.com'];
+
+function hostOf(url) {
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch (e) {
+    return null;
+  }
+}
+
+function isCineJoy(host) {
+  return host === 'cinejoy.pk' || host.endsWith('.cinejoy.pk');
+}
+
+function isTrustedExternal(url, host) {
+  const protocol = new URL(url).protocol;
+  return (protocol === 'https:' || protocol === 'http:')
+    && EXTERNAL_ALLOW.some((d) => host === d || host.endsWith('.' + d));
+}
+
+// Popup policy: the app is a dedicated CineJoy client, so popups are locked
+// down hard. cinejoy.pk opens in-app. Blocklisted ad hosts die silently.
+// Background popunders (the classic click-triggered ad trick) die silently.
+// Only a genuine foreground link to a known-good site (e.g. a trailer on
+// YouTube) may open in the default browser. Everything else is swallowed —
+// no more ad tabs escaping to the browser.
+function popupPolicy({ url, disposition }) {
+  const host = hostOf(url);
+  if (!host) return { action: 'deny' };
+  if (isCineJoy(host)) return { action: 'allow' };
+  if (isAdHost(url) || disposition === 'background-tab') return { action: 'deny' };
+  if (isTrustedExternal(url, host)) shell.openExternal(url);
+  return { action: 'deny' };
+}
+
+// Same rule for the page itself: an ad script redirecting the whole window
+// (window.location = ...) must not be able to take over the app. Only
+// cinejoy.pk loads in the window; trusted sites go to the default browser.
+// Embedded players in iframes are not affected — this only checks top-level
+// page loads.
+function guardNavigation(event, url) {
+  const host = hostOf(url);
+  if (host && isCineJoy(host)) return;
+  event.preventDefault();
+  if (host && !isAdHost(url) && isTrustedExternal(url, host)) shell.openExternal(url);
+}
+
+// Apply the popup and navigation rules to every window, including popup
+// windows cinejoy.pk itself opens. Setting them on the main window alone
+// would leave those popups free to open anything.
+app.on('web-contents-created', (_event, contents) => {
+  contents.setWindowOpenHandler(popupPolicy);
+  contents.on('will-navigate', guardNavigation);
+  contents.on('will-redirect', (event, url, _isInPlace, isMainFrame) => {
+    if (isMainFrame) guardNavigation(event, url);
+  });
+});
+
+// Only fullscreen is granted to web content. Electron approves every
+// permission request by default, which would let any page (or ad script
+// that slips through) use notifications, location, camera or microphone
+// without asking.
+const ALLOWED_PERMISSIONS = new Set(['fullscreen']);
+
+function setUpSession() {
+  const ses = session.defaultSession;
+
+  // Block ad/tracker requests before they load.
+  ses.webRequest.onBeforeRequest((details, callback) => {
+    callback({ cancel: isAdHost(details.url) });
+  });
+
+  ses.setPermissionRequestHandler((_wc, permission, callback) => {
+    callback(ALLOWED_PERMISSIONS.has(permission));
+  });
+  ses.setPermissionCheckHandler((_wc, permission) => ALLOWED_PERMISSIONS.has(permission));
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
@@ -40,45 +119,11 @@ function createWindow() {
     backgroundColor: '#000000',
   });
 
-  // Block ad/tracker requests before they load.
-  win.webContents.session.webRequest.onBeforeRequest((details, callback) => {
-    callback({ cancel: isAdHost(details.url) });
-  });
-
-  // Popup policy: the app is a dedicated CineJoy client, so popups are locked
-  // down hard. cinejoy.pk opens in-app. Blocklisted ad hosts die silently.
-  // Background popunders (the classic click-triggered ad trick) die silently.
-  // Only a genuine foreground link to a known-good site (e.g. a trailer on
-  // YouTube) may open in the default browser. Everything else is swallowed —
-  // no more ad tabs escaping to the browser.
-  const EXTERNAL_ALLOW = ['youtube.com', 'youtu.be', 'vimeo.com'];
-  win.webContents.setWindowOpenHandler(({ url, disposition }) => {
-    let host = '';
-    try {
-      host = new URL(url).hostname.toLowerCase();
-    } catch (e) {
-      return { action: 'deny' };
-    }
-    if (host === 'cinejoy.pk' || host.endsWith('.cinejoy.pk')) {
-      return { action: 'allow' };
-    }
-    if (isAdHost(url)) {
-      return { action: 'deny' };
-    }
-    if (disposition === 'background-tab') {
-      return { action: 'deny' };
-    }
-    const trusted = EXTERNAL_ALLOW.some((d) => host === d || host.endsWith('.' + d));
-    if (trusted) {
-      shell.openExternal(url);
-    }
-    return { action: 'deny' };
-  });
-
   win.loadURL(HOME_URL);
 }
 
 app.whenReady().then(() => {
+  setUpSession();
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

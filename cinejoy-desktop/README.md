@@ -17,6 +17,17 @@ cinejoy.pk opens new windows. Blocklisted ad hosts and background popunders
 are denied silently. Only a genuine foreground trailer link (YouTube/Vimeo)
 opens in the default browser.
 
+The same rules apply to every window the app opens, and to the page itself:
+a script that tries to send the whole window to another site is stopped
+(YouTube/Vimeo go to the default browser instead). Embedded players inside
+the page are not affected.
+
+## Permissions
+
+Web content gets fullscreen and nothing else. Notifications, location,
+camera, microphone and similar requests are refused automatically —
+Electron would otherwise grant them all without asking.
+
 ## Build
 
 Requires Node.js:
