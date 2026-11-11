@@ -22,15 +22,21 @@ NAMESPACE="$(gradle_value namespace)"
 PACKAGE="$(gradle_value applicationId)"
 VERSION_CODE="$(gradle_value versionCode)"
 VERSION_NAME="$(gradle_value versionName)"
-if [ -z "$NAMESPACE" ] || [ -z "$PACKAGE" ] || [ -z "$VERSION_CODE" ] || [ -z "$VERSION_NAME" ]; then
-  echo "Could not read namespace/applicationId/versionCode/versionName from app/build.gradle.kts" >&2
+MIN_SDK="$(gradle_value minSdk)"
+TARGET_SDK="$(gradle_value targetSdk)"
+COMPILE_SDK="$(gradle_value compileSdk)"
+if [ -z "$NAMESPACE" ] || [ -z "$PACKAGE" ] || [ -z "$VERSION_CODE" ] || [ -z "$VERSION_NAME" ] \
+   || [ -z "$MIN_SDK" ] || [ -z "$TARGET_SDK" ] || [ -z "$COMPILE_SDK" ]; then
+  echo "Could not read namespace/applicationId/version/SDK levels from app/build.gradle.kts" >&2
   exit 1
 fi
 echo "==> $PACKAGE $VERSION_NAME ($VERSION_CODE)"
 
 SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/android-sdk}}"
-BT="$SDK/build-tools/34.0.0"
-PLATFORM="$SDK/platforms/android-34/android.jar"
+# Newest installed build-tools; the platform matching compileSdk.
+BT="$(ls -d "$SDK"/build-tools/*/ 2>/dev/null | sort -V | tail -1)"
+BT="${BT%/}"
+PLATFORM="$SDK/platforms/android-$COMPILE_SDK/android.jar"
 export JAVA_HOME="${JAVA_HOME:-$HOME/jdk}"
 export PATH="$JAVA_HOME/bin:$PATH"
 for f in "$BT/aapt2" "$PLATFORM"; do
@@ -59,7 +65,7 @@ LINK_ARGS=(-o "$OUT/base.apk"
   --manifest "$OUT/AndroidManifest.xml"
   -I "$PLATFORM"
   --java "$OUT/gen"
-  --min-sdk-version 24 --target-sdk-version 34
+  --min-sdk-version "$MIN_SDK" --target-sdk-version "$TARGET_SDK"
   --version-code "$VERSION_CODE" --version-name "$VERSION_NAME")
 [ "$PACKAGE" != "$NAMESPACE" ] && LINK_ARGS+=(--rename-manifest-package "$PACKAGE")
 [ -d "$SRC/assets" ] && LINK_ARGS+=(-A "$SRC/assets")
@@ -75,7 +81,7 @@ fi
 grep -v -e "bootstrap class path" -e "system modules path" "$OUT/javac.log" || true
 
 echo "==> d8 (dex)"
-"$BT/d8" --lib "$PLATFORM" --min-api 24 --output "$OUT/dex" $(find "$OUT/classes" -name "*.class")
+"$BT/d8" --lib "$PLATFORM" --min-api "$MIN_SDK" --output "$OUT/dex" $(find "$OUT/classes" -name "*.class")
 
 echo "==> insert classes.dex"
 cp "$OUT/base.apk" "$OUT/app-unsigned.apk"
