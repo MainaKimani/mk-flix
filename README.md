@@ -2,7 +2,7 @@
 
 App built by **Blendy Studio (MK)**.
 
-## 🎬 MK-Flix — v1.3.0
+## 🎬 MK-Flix — v1.3.1
 
 _MK-Flix: Powered by CineJoy. NutFlix just got better 😉_
 
@@ -11,13 +11,13 @@ in its own fullscreen window, without the ads and pop-ups.
 
 ### Download
 
-Latest release: **[v1.3.0](https://github.com/MainaKimani/mk-flix/releases/tag/v1.3.0)**
+Latest release: **[v1.3.1](https://github.com/MainaKimani/mk-flix/releases/tag/v1.3.1)**
 
 | Platform | Download | How to install |
 |---|---|---|
-| Android 7.0+ | [MK-Flix_1.3.0.apk](https://github.com/MainaKimani/mk-flix/releases/download/v1.3.0/MK-Flix_1.3.0.apk) | Open the file on your phone and allow installing from that source when asked. |
-| Windows 10/11 (64-bit) | [MK-Flix-Windows-x64.zip](https://github.com/MainaKimani/mk-flix/releases/download/v1.3.0/MK-Flix-Windows-x64.zip) | Extract the zip and run `MK-Flix.exe`. Step-by-step guide inside: `how-to-install.txt`. |
-| Ubuntu/Debian (64-bit) | [MK-Flix_1.3.0_amd64.deb](https://github.com/MainaKimani/mk-flix/releases/download/v1.3.0/MK-Flix_1.3.0_amd64.deb) | `sudo apt install ./MK-Flix_1.3.0_amd64.deb`, then open MK-Flix from your apps menu. |
+| Android 7.0+ | [MK-Flix_1.3.1.apk](https://github.com/MainaKimani/mk-flix/releases/download/v1.3.1/MK-Flix_1.3.1.apk) | Open the file on your phone and allow installing from that source when asked. |
+| Windows 10/11 (64-bit) | [MK-Flix-Windows-x64.zip](https://github.com/MainaKimani/mk-flix/releases/download/v1.3.1/MK-Flix-Windows-x64.zip) | Extract the zip and run `MK-Flix.exe`. Step-by-step guide inside: `how-to-install.txt`. |
+| Ubuntu/Debian (64-bit) | [MK-Flix_1.3.1_amd64.deb](https://github.com/MainaKimani/mk-flix/releases/download/v1.3.1/MK-Flix_1.3.1_amd64.deb) | `sudo apt install ./MK-Flix_1.3.1_amd64.deb`, then open MK-Flix from your apps menu. |
 
 - **Upgrading from CineJoy on Android:** uninstall the CineJoy app first.
   MK-Flix is signed with a new key, so Android won't install it over CineJoy.
@@ -76,6 +76,17 @@ python3 branding/make-icons.py   # needs Pillow
 ```
 
 ## Releases
+
+### v1.3.1
+[Release page and downloads](https://github.com/MainaKimani/mk-flix/releases/tag/v1.3.1)
+
+- Fixed (Android): rows of posters sometimes couldn't be swiped, and the
+  app sometimes opened Chrome on its own. An ad script on the site laid an
+  invisible layer over the page that swallowed swipes and sent taps to
+  ads. The script is now blocked, any such layer lets touches through, and
+  only cinejoy.pk loads in the app: ads can no longer send you to Chrome.
+- Android 1.3.1 installs as an update over 1.3.0; no need to uninstall.
+- Desktop: blocks the same ad script.
 
 ### v1.3.0 — MK-Flix
 [Release page and downloads](https://github.com/MainaKimani/mk-flix/releases/tag/v1.3.0)

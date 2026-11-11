@@ -20,8 +20,8 @@ android {
         applicationId = "com.w2a.um1c"
         minSdk = 24
         targetSdk = 34
-        versionCode = 130
-        versionName = "1.3.0"
+        versionCode = 131
+        versionName = "1.3.1"
     }
 
     signingConfigs {

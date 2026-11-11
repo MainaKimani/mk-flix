@@ -5,7 +5,7 @@ with ad blocking, MK-Flix branding and a proper error screen.
 
 - Package: `com.w2a.um1c` (kept from CineJoy; changing it would make Android
   treat MK-Flix as a different app)
-- Version: 1.3.0 (versionCode 130), set in `app/build.gradle.kts`
+- Version: 1.3.1 (versionCode 131), set in `app/build.gradle.kts`
 - Android 7.0 (API 24) and newer; targets and compiles against API 34
 
 ## What's where
@@ -18,8 +18,16 @@ All the app's code is in `app/src/main/java/com/w2a/um1c/MainActivity.java`:
   orientation you had; Back leaves fullscreen first
 - **Downloads** through Android's DownloadManager, with the page's cookies
   so signed-in downloads work; asks for storage permission on Android 7–9
-- **Links to other apps** (`tel:`, Play Store, `intent:`): limited to what a
-  browser may open, so a web page can't launch arbitrary parts of other apps
+- **Navigation**, matching the desktop app: only cinejoy.pk loads in the
+  app; a tapped YouTube or Vimeo link opens in its app or the browser;
+  anything else off-site is dropped. Embedded players aren't affected.
+- **Links to other apps** (`tel:`, Play Store, `intent:`): only from a real
+  tap, never for intents that just open a web page in a browser (how ads
+  escape to Chrome), and limited to what a browser may open, so a web page
+  can't launch arbitrary parts of other apps
+- **Click-catchers**: ad networks' transparent full-screen overlays (top
+  z-index, added after load) are made to let touches through, so swipes and
+  taps reach the page
 - **Branding**: `assets/mkflix-logo.css` draws the MK-Flix mark in place of
   the site's logos (header and video loading screen), added as soon as each
   page is about to show; `assets/mkflix-footer.js` replaces the site's footer
