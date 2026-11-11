@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 
 const HOME_URL = 'https://cinejoy.pk/';
+const APP_TITLE = 'MK-Flix: Powered by CineJoy';
 
 // ---- Built-in ad/tracker blocker (same host list as the Android app) ----
 const adHosts = new Set();
@@ -87,6 +88,13 @@ app.on('web-contents-created', (_event, contents) => {
   });
 });
 
+// Every window, popups included, keeps the app's name in the title bar
+// instead of switching to whatever <title> the current page sets.
+app.on('browser-window-created', (_event, win) => {
+  win.setTitle(APP_TITLE);
+  win.on('page-title-updated', (event) => event.preventDefault());
+});
+
 // Only fullscreen is granted to web content. Electron approves every
 // permission request by default, which would let any page (or ad script
 // that slips through) use notifications, location, camera or microphone
@@ -114,7 +122,7 @@ function createWindow() {
     minWidth: 900,
     minHeight: 600,
     autoHideMenuBar: true,
-    title: 'CineJoy',
+    title: APP_TITLE,
     icon: path.join(__dirname, 'icon.ico'),
     backgroundColor: '#000000',
   });
