@@ -8,7 +8,7 @@ Portable Windows (x64) build — unzip and run, no installer needed.
 - `main.js` — app entry point: window setup, ad/tracker blocking, popup policy
 - `package.json` — project metadata and dev dependencies
 - `adblock-hosts.txt` — ad/tracker host blocklist (shared with the Android app)
-- `icon.ico` — app icon (binary; not stored in this repo — see note below)
+- `icon.ico` — app icon (16–256 px), made from the Android launcher artwork
 
 ## Popup policy
 
@@ -48,9 +48,3 @@ Notes:
 
 Installable zips (`CineJoy-Windows-x64.zip`) are published through GitHub
 Releases, created manually in the GitHub web UI.
-
-## Note on binaries
-
-This repo's GitHub connection is text-only, so `icon.ico` isn't stored here.
-Grab it from a release zip (`resources/app/icon.ico`), or regenerate it from
-the Android project's icon artwork.
