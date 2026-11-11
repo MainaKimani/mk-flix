@@ -12,7 +12,7 @@ Portable Windows (x64) build — unzip and run, no installer needed.
 
 ## Popup policy
 
-The app is a dedicated CineJoy client, so popups are locked down: only
+MK-Flix is a dedicated cinejoy.pk client, so popups are locked down: only
 cinejoy.pk opens new windows. Blocklisted ad hosts and background popunders
 are denied silently. Only a genuine foreground trailer link (YouTube/Vimeo)
 opens in the default browser.

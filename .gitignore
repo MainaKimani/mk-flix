@@ -1,6 +1,6 @@
 # Node / Electron
 node_modules/
-cinejoy-desktop/dist/
+mk-flix-desktop/dist/
 
 # Android / Gradle build output
 .gradle/

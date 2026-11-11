@@ -1,5 +1,5 @@
 #!/bin/bash
-# build-apk.sh — manual APK build for CineJoy (Gradle can't run in this sandbox,
+# build-apk.sh — manual APK build for MK-Flix (for machines without Gradle;
 # so this drives the official SDK build-tools directly: aapt2 -> javac -> d8 -> zipalign -> apksigner)
 #
 # Paths can be overridden: ANDROID_HOME (SDK), JAVA_HOME (JDK 17+).

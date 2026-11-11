@@ -11,7 +11,7 @@
 // missing. The footer element itself is kept, so its bottom padding still
 // keeps the page clear of the site's bottom navigation bar on narrow screens.
 //
-// This file is shared: the desktop app loads it from cinejoy-desktop/, the
+// This file is shared: the desktop app loads it from mk-flix-desktop/, the
 // Android app from app/src/main/assets/. Keep the two copies identical.
 (function () {
   if (window.__mkflixFooter) return;

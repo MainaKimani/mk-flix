@@ -50,7 +50,7 @@ function isTrustedExternal(url, host) {
     && EXTERNAL_ALLOW.some((d) => host === d || host.endsWith('.' + d));
 }
 
-// Popup policy: the app is a dedicated CineJoy client, so popups are locked
+// Popup policy: MK-Flix is a dedicated cinejoy.pk client, so popups are locked
 // down hard. cinejoy.pk opens in-app. Blocklisted ad hosts die silently.
 // Background popunders (the classic click-triggered ad trick) die silently.
 // Only a genuine foreground link to a known-good site (e.g. a trailer on

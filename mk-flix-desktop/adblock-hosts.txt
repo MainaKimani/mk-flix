@@ -1,4 +1,4 @@
-# CineJoy ad/tracker blocklist — one host per line, subdomains are matched too.
+# MK-Flix ad/tracker blocklist — one host per line, subdomains are matched too.
 # Requests to these hosts are dropped inside the app before they load.
 
 pyppo.com
