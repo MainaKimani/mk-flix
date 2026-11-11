@@ -1,8 +1,10 @@
 package com.w2a.um1c;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.DownloadManager;
+import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
@@ -15,6 +17,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
+import android.webkit.CookieManager;
 import android.webkit.DownloadListener;
 import android.webkit.URLUtil;
 import android.webkit.WebChromeClient;
@@ -42,7 +45,15 @@ public class MainActivity extends Activity {
     private FrameLayout fullscreenContainer;
     private View customView;
     private WebChromeClient.CustomViewCallback customViewCallback;
+    // Kept here because WebView.getWebChromeClient() only exists from API 26.
+    private WebChromeClient chromeClient;
+    // Orientation to return to when fullscreen video ends.
+    private int orientationBeforeFullscreen = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
+    // Download waiting on the storage permission (Android 7–9 only).
+    private DownloadManager.Request pendingDownload;
     private final Set<String> adHosts = new HashSet<>();
+
+    private static final int REQUEST_STORAGE_PERMISSION = 1;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -104,7 +115,7 @@ public class MainActivity extends Activity {
             }
         });
 
-        webView.setWebChromeClient(new WebChromeClient() {
+        chromeClient = new WebChromeClient() {
             @Override
             public void onShowCustomView(View view, CustomViewCallback callback) {
                 if (customView != null) {
@@ -129,6 +140,7 @@ public class MainActivity extends Activity {
 
                 webView.setVisibility(View.GONE);
                 hideSystemUi();
+                orientationBeforeFullscreen = getRequestedOrientation();
                 setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
             }
 
@@ -146,9 +158,10 @@ public class MainActivity extends Activity {
                 }
                 webView.setVisibility(View.VISIBLE);
                 showSystemUi();
-                setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+                setRequestedOrientation(orientationBeforeFullscreen);
             }
-        });
+        };
+        webView.setWebChromeClient(chromeClient);
 
         webView.setDownloadListener(new DownloadListener() {
             @Override
@@ -156,23 +169,31 @@ public class MainActivity extends Activity {
                                         String contentDisposition, String mimeType,
                                         long contentLength) {
                 try {
+                    String fileName = URLUtil.guessFileName(url, contentDisposition, mimeType);
                     DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
                     request.setMimeType(mimeType);
                     request.addRequestHeader("User-Agent", userAgent);
-                    request.setTitle(URLUtil.guessFileName(url, contentDisposition, mimeType));
+                    // DownloadManager doesn't share the WebView's cookie jar, so
+                    // pass the session cookies along or logged-in downloads fail.
+                    String cookies = CookieManager.getInstance().getCookie(url);
+                    if (cookies != null) {
+                        request.addRequestHeader("Cookie", cookies);
+                    }
+                    request.setTitle(fileName);
                     request.setDescription("Downloading file");
                     request.allowScanningByMediaScanner();
                     request.setNotificationVisibility(
                             DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
                     request.setDestinationInExternalPublicDir(
-                            Environment.DIRECTORY_DOWNLOADS,
-                            URLUtil.guessFileName(url, contentDisposition, mimeType));
+                            Environment.DIRECTORY_DOWNLOADS, fileName);
 
-                    DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
-                    if (dm != null) {
-                        dm.enqueue(request);
-                        Toast.makeText(getApplicationContext(),
-                                "Download started", Toast.LENGTH_LONG).show();
+                    if (needsStoragePermission()) {
+                        pendingDownload = request;
+                        requestPermissions(
+                                new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},
+                                REQUEST_STORAGE_PERMISSION);
+                    } else {
+                        enqueueDownload(request);
                     }
                 } catch (Exception e) {
                     Toast.makeText(getApplicationContext(),
@@ -185,6 +206,47 @@ public class MainActivity extends Activity {
             webView.restoreState(savedInstanceState);
         } else {
             webView.loadUrl(HOME_URL);
+        }
+    }
+
+    /**
+     * Writing to the public Downloads folder needs a runtime permission on
+     * Android 7–9. From Android 10 DownloadManager can write there without it.
+     */
+    private boolean needsStoragePermission() {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
+                && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                != PackageManager.PERMISSION_GRANTED;
+    }
+
+    private void enqueueDownload(DownloadManager.Request request) {
+        try {
+            DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+            if (dm != null) {
+                dm.enqueue(request);
+                Toast.makeText(getApplicationContext(),
+                        "Download started", Toast.LENGTH_LONG).show();
+            }
+        } catch (Exception e) {
+            Toast.makeText(getApplicationContext(),
+                    "Download failed: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                                           int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != REQUEST_STORAGE_PERMISSION || pendingDownload == null) {
+            return;
+        }
+        DownloadManager.Request request = pendingDownload;
+        pendingDownload = null;
+        if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            enqueueDownload(request);
+        } else {
+            Toast.makeText(getApplicationContext(),
+                    "Storage permission is needed to download files", Toast.LENGTH_LONG).show();
         }
     }
 
@@ -262,8 +324,13 @@ public class MainActivity extends Activity {
 
     /**
      * Route non-web URLs (intent://, market://, tel:, ...) to an external app
-     * only when something can handle them; otherwise swallow them so the
-     * WebView never shows an ERR_UNKNOWN_URL_SCHEME page.
+     * when one can handle them; otherwise swallow them so the WebView never
+     * shows an ERR_UNKNOWN_URL_SCHEME page.
+     *
+     * Intents built from a web page are untrusted, so they are limited to
+     * what a browser could open: BROWSABLE activities only, with any explicit
+     * component or selector stripped. Without this a page could launch
+     * arbitrary exported activities in other apps.
      */
     private boolean handleUrl(String url) {
         if (url == null) {
@@ -272,16 +339,31 @@ public class MainActivity extends Activity {
         if (url.startsWith("http://") || url.startsWith("https://")) {
             return false; // load in the WebView
         }
+        Intent intent;
         try {
-            Intent intent;
-            if (url.startsWith("intent://")) {
+            if (url.startsWith("intent:")) {
                 intent = Intent.parseUri(url, Intent.URI_INTENT_SCHEME);
             } else {
                 intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
             }
-            PackageManager pm = getPackageManager();
-            if (intent.resolveActivity(pm) != null) {
-                startActivity(intent);
+        } catch (Exception e) {
+            return true;
+        }
+        intent.addCategory(Intent.CATEGORY_BROWSABLE);
+        intent.setComponent(null);
+        intent.setSelector(null);
+
+        // Attempt the launch instead of checking resolveActivity() first: on
+        // Android 11+ package visibility rules make resolveActivity() return
+        // null for most apps unless they are declared in <queries>.
+        try {
+            startActivity(intent);
+        } catch (ActivityNotFoundException e) {
+            // No app installed: honour the page's web fallback if it gave one.
+            String fallback = intent.getStringExtra("browser_fallback_url");
+            if (fallback != null
+                    && (fallback.startsWith("https://") || fallback.startsWith("http://"))) {
+                webView.loadUrl(fallback);
             }
         } catch (Exception ignored) {
         }
@@ -310,7 +392,7 @@ public class MainActivity extends Activity {
     public void onBackPressed() {
         if (customView != null) {
             // Exit fullscreen video first
-            webView.getWebChromeClient().onHideCustomView();
+            chromeClient.onHideCustomView();
         } else if (webView != null && webView.canGoBack()) {
             webView.goBack();
         } else {
