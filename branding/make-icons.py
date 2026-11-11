@@ -12,6 +12,7 @@ Writes:
   mk-flix-app/.../drawable/ic_launcher_monochrome.png  themed icon (13+)
   mkflix-logo.css (desktop folder and Android assets)  logos shown in place of
                                                         cinejoy.pk's (header, loading screen)
+  mk-flix-app/.../assets/icon.png                      icon on the Android error screen
 
 The master is a glowing mark on a transparent background, designed for dark
 surroundings. The desktop icons keep it transparent. Android legacy icons
@@ -147,6 +148,10 @@ def main():
         "}\n")
     for folder in (DESKTOP, ANDROID_ASSETS):
         (folder / "mkflix-logo.css").write_text(logo_css)
+
+    # error.html (shared by both apps) shows the icon; Android serves it from
+    # assets, the desktop app from its own folder (icon.png above).
+    big.resize((256, 256), Image.LANCZOS).save(ANDROID_ASSETS / "icon.png", optimize=True)
 
     (RES / "drawable").mkdir(exist_ok=True)
     place(silhouette(mark), 432, ADAPTIVE_FILL, shift=CIRCLE_SHIFT).save(

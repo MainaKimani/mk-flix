@@ -9,7 +9,7 @@ Portable Windows (x64) build — unzip and run, no installer needed.
 - `package.json` — project metadata and dev dependencies
 - `adblock-hosts.txt` — ad/tracker host blocklist (shared with the Android app)
 - `error.html` — shown instead of a blank window when cinejoy.pk can't load
-  (network block, offline, ...), with a Retry button
+  (network block, offline, ...), with a Retry button (shared with the Android app)
 - `mkflix-footer.js` — run in every cinejoy.pk page: replaces the site's
   footer (shared with the Android app)
 - `mkflix-logo.css` — draws the MK-Flix icon in place of the site's logos

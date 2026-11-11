@@ -1,10 +1,14 @@
 <!doctype html>
 <!--
-  Shown by main.js when a cinejoy.pk page fails to load. main.js passes the
-  failed page and Chromium's error as query parameters:
-    ?url=<page that failed>&code=<negative net error code>&desc=<ERR_...>
+  Shown when a cinejoy.pk page fails to load: by main.js in the desktop app,
+  and by MainActivity from assets/ in the Android app. Both pass the failed
+  page and the error as query parameters:
+    ?url=<page that failed>&code=<net error code, if known>&desc=<ERR_... name>
   Retry goes back to that page (only cinejoy.pk pages are retried; anything
   else falls back to the home page).
+
+  This file is shared: keep mk-flix-desktop/error.html and the Android
+  app's assets/error.html identical.
 -->
 <html lang="en">
 <head>
@@ -82,16 +86,25 @@
     var message = document.getElementById('message');
     var hint = document.getElementById('hint');
 
-    // Chromium net error codes: -100..-199 connection, -200..-299 certificate,
-    // -105 name not resolved, -106 internet disconnected.
-    if (code === -106) {
+    // Classify by Chromium's net error code (desktop passes it as-is) or by
+    // the error's name, which Android passes in desc (its own error codes
+    // are coarser): -106 / INTERNET_DISCONNECTED = offline; -200..-299 /
+    // CERT_ / SSL = certificate; -100..-199, NAME_NOT_RESOLVED, CONNECTION_,
+    // TIMED_OUT, ADDRESS_UNREACHABLE = connection.
+    var name = desc.toUpperCase();
+    var offline = code === -106 || /INTERNET_DISCONNECTED/.test(name);
+    var cert = (code <= -200 && code > -300) || /CERT|SSL/.test(name);
+    var connection = (code <= -100 && code > -200) ||
+      /NAME_NOT_RESOLVED|CONNECTION_|TIMED_OUT|ADDRESS_UNREACHABLE|HOST_LOOKUP|CONNECT/.test(name);
+
+    if (offline) {
       title.textContent = "You're offline";
       message.textContent = 'MK-Flix needs an internet connection.';
       hint.textContent = 'It will try again by itself when you reconnect.';
-    } else if (code <= -200 && code > -300) {
+    } else if (cert) {
       message.textContent = 'Your network is blocking or inspecting the connection to cinejoy.pk.';
       hint.textContent = 'Work and school networks often block streaming sites. Try another network, such as a phone hotspot.';
-    } else if (code === -105 || (code <= -100 && code > -200)) {
+    } else if (connection) {
       message.textContent = "The connection to cinejoy.pk failed or was blocked.";
       hint.textContent = 'Check your internet connection, or try another network.';
     }

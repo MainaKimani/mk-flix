@@ -9,7 +9,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
 import android.net.Uri;
+import android.net.http.SslError;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
@@ -19,6 +21,9 @@ import android.view.Window;
 import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.DownloadListener;
+import android.webkit.SslErrorHandler;
+import android.webkit.WebBackForwardList;
+import android.webkit.WebResourceError;
 import android.webkit.URLUtil;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -43,6 +48,17 @@ import java.util.Set;
 public class MainActivity extends Activity {
 
     private static final String HOME_URL = "https://cinejoy.pk/";
+    // Shown instead of a failed page; see showErrorPage().
+    private static final String ERROR_PAGE = "file:///android_asset/error.html";
+
+    // Page currently being opened, to tell a page's own SSL failure from a
+    // failing image or ad on it (onReceivedSslError doesn't say which).
+    private String loadingUrl;
+    // Page whose SSL failure is already on screen, so the follow-up generic
+    // error for the same page doesn't replace the more specific message.
+    private String sslFailedUrl;
+    // Page the error screen is showing a failure for; Back skips over it.
+    private String errorPageFailedUrl;
 
     private WebView webView;
     private FrameLayout fullscreenContainer;
@@ -126,11 +142,51 @@ public class MainActivity extends Activity {
             }
 
             @Override
+            public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                super.onPageStarted(view, url, favicon);
+                if (isWebUrl(url)) {
+                    loadingUrl = url;
+                }
+            }
+
+            @Override
             public void onPageCommitVisible(WebView view, String url) {
                 super.onPageCommitVisible(view, url);
+                if (isWebUrl(url)) {
+                    sslFailedUrl = null; // this page made it, so any earlier SSL failure is stale
+                }
                 // Earliest point the new page can take a script, before it is drawn.
                 if (!logoJs.isEmpty() && isCineJoyUrl(url)) {
                     view.evaluateJavascript(logoJs, null);
+                }
+            }
+
+            @Override
+            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                super.onReceivedError(view, request, error);
+                String url = request.getUrl().toString();
+                String desc = String.valueOf(error.getDescription());
+                // Only whole-page failures, not a broken image or ad. ERR_ABORTED
+                // isn't a failure (a redirect, or the user moved on). An SSL
+                // failure already showed its own, more specific error screen.
+                if (!request.isForMainFrame() || !isWebUrl(url)
+                        || desc.contains("ERR_ABORTED") || sameUrl(url, sslFailedUrl)) {
+                    return;
+                }
+                showErrorPage(url, error.getErrorCode(), desc);
+            }
+
+            @Override
+            public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
+                // Never load a page with a bad certificate (the default too).
+                handler.cancel();
+                // This callback doesn't say which frame failed. Treat it as a
+                // page failure only when it's the page being opened, so one
+                // blocked image or ad can't replace a working page. Networks
+                // that intercept HTTPS (e.g. office firewalls) land here.
+                if (sameUrl(error.getUrl(), loadingUrl)) {
+                    sslFailedUrl = error.getUrl();
+                    showErrorPage(error.getUrl(), -200, sslErrorName(error.getPrimaryError()));
                 }
             }
 
@@ -244,6 +300,7 @@ public class MainActivity extends Activity {
         if (savedInstanceState != null) {
             webView.restoreState(savedInstanceState);
         } else {
+            loadingUrl = HOME_URL;
             webView.loadUrl(HOME_URL);
         }
     }
@@ -395,7 +452,8 @@ public class MainActivity extends Activity {
         if (url == null) {
             return true;
         }
-        if (url.startsWith("http://") || url.startsWith("https://")) {
+        if (isWebUrl(url)) {
+            loadingUrl = url; // before onPageStarted, which a fast SSL failure can beat
             return false; // load in the WebView
         }
         Intent intent;
@@ -452,10 +510,83 @@ public class MainActivity extends Activity {
         if (customView != null) {
             // Exit fullscreen video first
             chromeClient.onHideCustomView();
+        } else if (webView != null && isErrorPage(webView.getUrl())) {
+            backFromErrorPage();
         } else if (webView != null && webView.canGoBack()) {
             webView.goBack();
         } else {
             super.onBackPressed();
+        }
+    }
+
+    /**
+     * Back from the error screen goes to the last page that worked. The
+     * history behind it holds the failed page (going there would just fail
+     * again) and possibly earlier error screens, so skip those; if nothing
+     * else is left, leave the app.
+     */
+    private void backFromErrorPage() {
+        WebBackForwardList history = webView.copyBackForwardList();
+        int current = history.getCurrentIndex();
+        for (int i = current - 1; i >= 0; i--) {
+            String url = history.getItemAtIndex(i).getUrl();
+            if (!isErrorPage(url) && !sameUrl(url, errorPageFailedUrl)) {
+                webView.goBackOrForward(i - current);
+                return;
+            }
+        }
+        super.onBackPressed();
+    }
+
+    /**
+     * Replace a failed page with assets/error.html (shared with the desktop
+     * app), which explains the likely cause and offers Retry. The error's
+     * name (net::ERR_...) is what the page uses to tell causes apart;
+     * Android's own error codes are coarser than Chromium's.
+     */
+    private void showErrorPage(String failedUrl, int code, String desc) {
+        errorPageFailedUrl = failedUrl;
+        String page = ERROR_PAGE + "?url=" + Uri.encode(failedUrl)
+                + "&code=" + code + "&desc=" + Uri.encode(desc);
+        // Posted so the WebView finishes handling the failure first.
+        webView.post(() -> webView.loadUrl(page));
+    }
+
+    private static boolean isErrorPage(String url) {
+        return url != null && url.startsWith(ERROR_PAGE);
+    }
+
+    private static boolean isWebUrl(String url) {
+        return url != null && (url.startsWith("https://") || url.startsWith("http://"));
+    }
+
+    /** Same page, ignoring a #fragment and a trailing slash. */
+    private static boolean sameUrl(String a, String b) {
+        if (a == null || b == null) {
+            return false;
+        }
+        return normalise(a).equals(normalise(b));
+    }
+
+    private static String normalise(String url) {
+        int hash = url.indexOf('#');
+        String u = hash >= 0 ? url.substring(0, hash) : url;
+        return u.endsWith("/") ? u.substring(0, u.length() - 1) : u;
+    }
+
+    /** Chromium's name for an SslError, so error.html can recognise it. */
+    private static String sslErrorName(int primaryError) {
+        switch (primaryError) {
+            case SslError.SSL_UNTRUSTED:
+                return "ERR_CERT_AUTHORITY_INVALID";
+            case SslError.SSL_IDMISMATCH:
+                return "ERR_CERT_COMMON_NAME_INVALID";
+            case SslError.SSL_EXPIRED:
+            case SslError.SSL_NOTYETVALID:
+            case SslError.SSL_DATE_INVALID:
+                return "ERR_CERT_DATE_INVALID";
+            default:
+                return "ERR_CERT_INVALID";
         }
     }
 
