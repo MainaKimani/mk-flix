@@ -8,8 +8,16 @@ import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
+import android.app.UiModeManager;
 import android.content.pm.PackageManager;
+import android.content.res.Configuration;
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.os.SystemClock;
+import android.view.KeyEvent;
+import android.view.MotionEvent;
+import android.view.ViewConfiguration;
 import android.net.Uri;
 import android.net.http.SslError;
 import android.os.Build;
@@ -80,6 +88,14 @@ public class MainActivity extends Activity {
     private String logoJs = "";
     private String footerJs = "";
 
+    // Android TV / Google TV. The same APK runs on phones and TVs; on a TV
+    // the app adds remote-control support (assets/mkflix-tv.js: desktop
+    // layout, arrow-key navigation, video keys) and a pointer mode for
+    // anything the arrows can't reach. Phones are unaffected.
+    private boolean isTv;
+    private String tvJs = "";
+    private TvPointer pointer;
+
     private static final int REQUEST_STORAGE_PERMISSION = 1;
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -110,6 +126,21 @@ public class MainActivity extends Activity {
         settings.setJavaScriptCanOpenWindowsAutomatically(false);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        }
+
+        UiModeManager uiMode = (UiModeManager) getSystemService(UI_MODE_SERVICE);
+        isTv = uiMode != null && uiMode.getCurrentModeType() == Configuration.UI_MODE_TYPE_TELEVISION;
+        if (isTv) {
+            tvJs = readAsset("mkflix-tv.js");
+            // mkflix-tv.js asks for a 1280px-wide page; these let the WebView
+            // honour that and scale it to fill the screen.
+            settings.setUseWideViewPort(true);
+            settings.setLoadWithOverviewMode(true);
+            pointer = new TvPointer(this);
+            ((ViewGroup) webView.getParent()).addView(pointer, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            webView.setFocusable(true);
+            webView.requestFocus();
         }
 
         webView.setWebViewClient(new WebViewClient() {
@@ -161,6 +192,26 @@ public class MainActivity extends Activity {
                 if (!logoJs.isEmpty() && isCineJoyUrl(url)) {
                     view.evaluateJavascript(logoJs, null);
                 }
+                if (!tvJs.isEmpty() && isCineJoyUrl(url)) {
+                    view.evaluateJavascript(tvJs, null);
+                }
+            }
+
+            @Override
+            public void doUpdateVisitedHistory(WebView view, String url, boolean isReload) {
+                super.doUpdateVisitedHistory(view, url, isReload);
+                // On a TV, keep the screen on while on a video page, so the
+                // screensaver doesn't start mid-film. Also called for the
+                // site's in-page navigation (history.pushState).
+                if (isTv) {
+                    boolean watching = isCineJoyUrl(url) && Uri.parse(url).getPath() != null
+                            && Uri.parse(url).getPath().startsWith("/watch/");
+                    if (watching) {
+                        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                    } else {
+                        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                    }
+                }
             }
 
             @Override
@@ -205,6 +256,11 @@ public class MainActivity extends Activity {
                         }
                         if (!footerJs.isEmpty()) {
                             view.evaluateJavascript(footerJs, null);
+                        }
+                        // TV script again in case commit-visible was skipped;
+                        // it guards against running twice.
+                        if (!tvJs.isEmpty()) {
+                            view.evaluateJavascript(tvJs, null);
                         }
                     }
                 } catch (Exception ignored) {
@@ -664,6 +720,197 @@ public class MainActivity extends Activity {
                 return "ERR_CERT_DATE_INVALID";
             default:
                 return "ERR_CERT_INVALID";
+        }
+    }
+
+    // --- TV remote ---------------------------------------------------------
+
+    // Holding OK for Android's long-press time switches pointer mode on or off.
+    private long okDownAt;
+    private boolean okLongPressHandled;
+
+    /**
+     * TV remote handling that has to happen before keys reach the page:
+     * - OK is decided on release, so a long press can toggle pointer mode
+     *   without the page also seeing an OK. A short press is then passed to
+     *   the page as a whole press.
+     * - In pointer mode the arrows move the pointer, OK taps where it
+     *   points, and Back leaves pointer mode.
+     * Everything else (and everything on phones, or in fullscreen video)
+     * goes the normal way: arrows and media keys reach mkflix-tv.js.
+     */
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (!isTv || pointer == null || customView != null) {
+            return super.dispatchKeyEvent(event);
+        }
+        int code = event.getKeyCode();
+        int action = event.getAction();
+
+        if (code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER
+                || code == KeyEvent.KEYCODE_NUMPAD_ENTER) {
+            if (action == KeyEvent.ACTION_DOWN) {
+                if (event.getRepeatCount() == 0) {
+                    okDownAt = event.getDownTime();
+                    okLongPressHandled = false;
+                } else if (!okLongPressHandled && (event.isLongPress()
+                        || event.getEventTime() - okDownAt >= ViewConfiguration.getLongPressTimeout())) {
+                    okLongPressHandled = true;
+                    togglePointer();
+                }
+                return true;
+            }
+            if (action == KeyEvent.ACTION_UP) {
+                if (okLongPressHandled) {
+                    okLongPressHandled = false;
+                    return true;
+                }
+                if (pointer.isOn()) {
+                    pointer.tap(webView);
+                    return true;
+                }
+                super.dispatchKeyEvent(new KeyEvent(event.getDownTime(), event.getEventTime(),
+                        KeyEvent.ACTION_DOWN, code, 0, event.getMetaState(), event.getDeviceId(),
+                        event.getScanCode(), event.getFlags(), event.getSource()));
+                return super.dispatchKeyEvent(event);
+            }
+        }
+
+        if (pointer.isOn()) {
+            switch (code) {
+                case KeyEvent.KEYCODE_DPAD_UP:
+                case KeyEvent.KEYCODE_DPAD_DOWN:
+                case KeyEvent.KEYCODE_DPAD_LEFT:
+                case KeyEvent.KEYCODE_DPAD_RIGHT:
+                    if (action == KeyEvent.ACTION_DOWN) {
+                        pointer.move(code, event.getRepeatCount(), webView);
+                    }
+                    return true;
+                case KeyEvent.KEYCODE_BACK:
+                    if (action == KeyEvent.ACTION_UP) {
+                        togglePointer();
+                    }
+                    return true;
+                default:
+                    break;
+            }
+        }
+        return super.dispatchKeyEvent(event);
+    }
+
+    private void togglePointer() {
+        pointer.setOn(!pointer.isOn());
+        Toast.makeText(this, pointer.isOn()
+                ? "Pointer on: arrows move it, OK taps. Hold OK or press Back to turn it off."
+                : "Pointer off", Toast.LENGTH_SHORT).show();
+    }
+
+    /**
+     * TV pointer mode: a cursor drawn over the page, moved with the remote's
+     * arrows, for anything arrow-key navigation can't reach. OK sends a tap
+     * at the pointer; pushing past a screen edge swipes the page (or a row
+     * of posters) under the pointer, so it scrolls.
+     */
+    static final class TvPointer extends View {
+        private final float density;
+        private final Paint glow = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint ring = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint dot = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private float x = -1, y = -1;
+        private boolean on;
+
+        TvPointer(Context context) {
+            super(context);
+            density = context.getResources().getDisplayMetrics().density;
+            setVisibility(GONE);
+            setFocusable(false);
+            setClickable(false);
+            glow.setColor(0x6600E5FF);
+            ring.setStyle(Paint.Style.STROKE);
+            ring.setStrokeWidth(3 * density);
+            ring.setColor(0xFFE040FB);
+            dot.setColor(0xFFFFFFFF);
+        }
+
+        boolean isOn() {
+            return on;
+        }
+
+        void setOn(boolean value) {
+            on = value;
+            if (on && x < 0) {
+                // Start in the middle. Measure the parent: while this view
+                // is hidden (GONE) it isn't laid out, so its own size is 0.
+                View parent = (View) getParent();
+                x = parent.getWidth() / 2f;
+                y = parent.getHeight() / 2f;
+            }
+            setVisibility(on ? VISIBLE : GONE);
+            invalidate();
+        }
+
+        void move(int keyCode, int repeat, WebView web) {
+            // Starts fine-grained, speeds up while the arrow is held.
+            float step = density * Math.min(6 + repeat * 3, 40);
+            float dx = 0, dy = 0;
+            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) dx = -step;
+            if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) dx = step;
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP) dy = -step;
+            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) dy = step;
+            View parent = (View) getParent();
+            int w = parent.getWidth(), h = parent.getHeight();
+            float nx = Math.max(0, Math.min(w - 1, x + dx));
+            float ny = Math.max(0, Math.min(h - 1, y + dy));
+            if (nx != x + dx || ny != y + dy) {
+                // At an edge: swipe the content under the pointer the other
+                // way, so more of it comes into view in the pointer's direction.
+                float dist = (dx != 0 ? w : h) / 3f;
+                swipe(web, x, y, x - Math.signum(dx) * dist, y - Math.signum(dy) * dist);
+            }
+            x = nx;
+            y = ny;
+            invalidate();
+        }
+
+        void tap(WebView web) {
+            long t = SystemClock.uptimeMillis();
+            touch(web, MotionEvent.ACTION_DOWN, t, t, x, y);
+            touch(web, MotionEvent.ACTION_UP, t, t + 60, x, y);
+        }
+
+        /**
+         * A drag from (x0,y0) to (x1,y1). It moves over ~250 ms and then holds
+         * still before lifting, so the page scrolls by the drag distance and
+         * stops, instead of treating it as a fling and racing to the end.
+         */
+        private static void swipe(WebView web, float x0, float y0, float x1, float y1) {
+            final long start = SystemClock.uptimeMillis();
+            final int steps = 15;
+            touch(web, MotionEvent.ACTION_DOWN, start, start, x0, y0);
+            for (int i = 1; i <= steps; i++) {
+                final float f = i / (float) steps;
+                web.postDelayed(() -> touch(web, MotionEvent.ACTION_MOVE, start, SystemClock.uptimeMillis(),
+                        x0 + (x1 - x0) * f, y0 + (y1 - y0) * f), i * 16L);
+            }
+            web.postDelayed(() -> touch(web, MotionEvent.ACTION_MOVE, start, SystemClock.uptimeMillis(), x1, y1),
+                    steps * 16L + 150);
+            web.postDelayed(() -> touch(web, MotionEvent.ACTION_UP, start, SystemClock.uptimeMillis(), x1, y1),
+                    steps * 16L + 300);
+        }
+
+        private static void touch(WebView web, int action, long downTime, long time, float x, float y) {
+            MotionEvent e = MotionEvent.obtain(downTime, time, action, x, y, 0);
+            e.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
+            web.dispatchTouchEvent(e);
+            e.recycle();
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            if (!on) return;
+            canvas.drawCircle(x, y, 18 * density, glow);
+            canvas.drawCircle(x, y, 12 * density, ring);
+            canvas.drawCircle(x, y, 3 * density, dot);
         }
     }
 

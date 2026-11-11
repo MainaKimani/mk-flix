@@ -41,6 +41,11 @@ Latest release: **[v1.3.1](https://github.com/MainaKimani/mk-flix/releases/tag/v
 - **Downloads** on Android go to your Downloads folder.
 - **Locked-down permissions** on desktop: pages get fullscreen and nothing
   else (no notifications, location, camera or microphone).
+- **Android TV / Google TV.** The same Android app runs on TVs, with its own
+  banner on the home screen. Use the remote's arrows to move a highlight
+  between posters and buttons and OK to open them; on a film, OK plays and
+  pauses and left/right skip 10 seconds. Hold OK for a pointer you steer
+  with the arrows, for anything the highlight can't reach.
 
 ### Repository layout
 
