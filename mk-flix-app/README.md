@@ -3,14 +3,15 @@
 Android client for [cinejoy.pk](https://cinejoy.pk/): a fullscreen WebView
 with ad blocking, MK-Flix branding and a proper error screen.
 
-- Package: `com.w2a.um1c` (kept from CineJoy; changing it would make Android
-  treat MK-Flix as a different app)
-- Version: 1.3.0 (versionCode 130), set in `app/build.gradle.kts`
-- Android 7.0 (API 24) and newer; targets and compiles against API 34
+- Package: `com.blendystudio.mkflix` since 1.3.1. CineJoy and MK-Flix 1.3.0
+  used `com.w2a.um1c`; Android treats the two as separate apps.
+- Version: 1.3.1 (versionCode 131), set in `app/build.gradle.kts`
+- Android 7.0 (API 24) and newer; targets and compiles against Android 16
+  (API 36)
 
 ## What's where
 
-All the app's code is in `app/src/main/java/com/w2a/um1c/MainActivity.java`:
+All the app's code is in `app/src/main/java/com/blendystudio/mkflix/MainActivity.java`:
 
 - **WebView setup** and the **ad blocker** (requests to hosts in
   `assets/adblock-hosts.txt` get a 404, subdomains included)
@@ -29,6 +30,15 @@ All the app's code is in `app/src/main/java/com/w2a/um1c/MainActivity.java`:
   offers Retry. Certificate failures count only for the page being opened,
   so a blocked image or ad can't replace a working page. Back from the error
   screen returns to the last page that worked.
+- **Back**: leaves fullscreen video, then goes back through pages, then
+  sends the app to the background. Android 13+ delivers Back through an
+  `OnBackInvokedCallback` (needed for predictive back when targeting
+  Android 16); older versions through `onBackPressed()`.
+- **Android 15+ edge to edge**: the layout's `fitsSystemWindows` keeps the
+  page clear of the status and navigation bars.
+- **Locked down**: no insecure (http) content on secure pages, no
+  cleartext traffic, and app data excluded from backups and device
+  transfers (`res/xml/data_extraction_rules.xml`).
 
 `error.html`, `mkflix-footer.js`, `mkflix-logo.css` and `adblock-hosts.txt`
 are shared with the desktop app and must stay identical to the copies in
@@ -44,14 +54,15 @@ SDK, Gradle 8.7 and a suitable Java (21).
 
 ### Command line
 
-Needs the Android SDK (`ANDROID_HOME`), Java 17 or 21 (Gradle 8.7 doesn't run
-on newer Java), and Gradle 8.7. There's no `gradlew` in the repo; run
-`gradle wrapper --gradle-version 8.7` once to create it, or use the Gradle
-that Android Studio downloads.
+Needs the Android SDK (`ANDROID_HOME`) and Java 17 or 21 (`JAVA_HOME`;
+Android Studio's own JDK works). The Gradle wrapper downloads Gradle 8.14.7,
+and the Android Gradle plugin (8.13.2) installs missing SDK platforms by
+itself once the SDK licences are accepted.
 
 ```sh
-gradle assembleDebug     # app/build/outputs/apk/debug/app-debug.apk
-gradle assembleRelease   # app/build/outputs/apk/release/app-release.apk
+./gradlew assembleDebug     # app/build/outputs/apk/debug/app-debug.apk
+./gradlew assembleRelease   # app/build/outputs/apk/release/app-release.apk
+./gradlew lintRelease       # app/build/reports/lint-results-release.html
 ```
 
 `build-apk.sh` builds a debug APK with the SDK tools directly, without
@@ -78,27 +89,31 @@ upgrade.
 
 ## Testing
 
-Worth checking on two emulators, Android 7.0 (API 24) and Android 14 or
-newer:
+Worth checking on two emulators, Android 7.0 (API 24) and Android 16 (API 36)
+or newer:
 
 | Check | Where |
 |---|---|
-| Name and icon on the home screen (themed icon on 13+) | API 34+ |
+| Name and icon on the home screen (themed icon on 13+) | API 36+ |
 | Old-style icon | API 24 |
 | MK-Flix logo in the header and on the video loading screen, no flash of the old one; MK-Flix footer | Any |
 | Fullscreen video, then Back: no crash | API 24 |
 | Rotation works again after leaving fullscreen | Any |
 | Download asks for storage permission, then works | API 24 |
-| `tel:` and Play Store links open their apps | API 34+ |
+| `tel:` and Play Store links open their apps | API 36+ |
+| Back (button and gesture): previous page, then the app goes to the background | API 24 and 36+ |
+| Page starts below the status bar and ends above the navigation bar | API 36+ |
 | Error screen: turn off Wi-Fi and data, open a page; it retries by itself when you reconnect | Any |
 
 Debug builds allow inspecting the WebView from Chrome's
 `chrome://inspect` (or any Chrome DevTools client over `adb forward`).
-Release builds don't.
+Release builds don't. Navigating from DevTools isn't a real tap, so Chromium
+leaves those pages out of Back history; tap links when testing Back.
 
 ## Installing
 
 Install the APK from the
 [latest release](https://github.com/MainaKimani/mk-flix/releases/latest).
-If the old CineJoy app, or a debug build, is installed, uninstall it first:
-they're signed with different keys, so Android won't install over them.
+CineJoy and MK-Flix 1.3.0 use a different package ID, so 1.3.1 installs
+next to them rather than replacing them: uninstall them first. A debug build
+of 1.3.1 must be uninstalled too, since it's signed with a different key.
