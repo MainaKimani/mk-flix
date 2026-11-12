@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<!-- MK-Flix account gate. Shared, identical, by both apps (Android assets and
+     the desktop folder). Loaded at startup instead of cinejoy.pk: it checks the
+     MK-Flix backend for an active subscription and only then sends the WebView
+     to the site. Otherwise it walks the user through sign-in, the plans and an
+     M-Pesa payment. Talks to the backend over fetch with a JWT kept in
+     localStorage; no cookies. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src *">
+<title>MK-Flix</title>
+<style>
+  :root {
+    --bg: #000;
+    --card: #0d0d12;
+    --line: #23232c;
+    --text: #f2f2f5;
+    --muted: #9a9aa6;
+    --cyan: #00e5ff;
+    --magenta: #e040fb;
+    --red: #ff3d57;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif; }
+  body { display: flex; align-items: center; justify-content: center; padding: 24px 16px; }
+  .card { width: 100%; max-width: 420px; background: var(--card);
+    border: 1px solid var(--line); border-radius: 18px; padding: 28px 24px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6); }
+  .logo { display: block; width: 76px; height: 76px; margin: 0 auto 10px; }
+  .brand { text-align: center; font-weight: 700; font-size: 22px; letter-spacing: 0.5px;
+    background: linear-gradient(90deg, var(--cyan), var(--magenta), var(--red));
+    -webkit-background-clip: text; background-clip: text; color: transparent; margin: 0 0 4px; }
+  h1 { font-size: 19px; margin: 18px 0 6px; text-align: center; }
+  p.sub { color: var(--muted); font-size: 14px; line-height: 1.5; margin: 0 0 18px; text-align: center; }
+  .note { background: rgba(0,229,255,0.07); border: 1px solid rgba(0,229,255,0.25);
+    border-radius: 12px; padding: 12px 14px; font-size: 13px; color: #cdeef6; line-height: 1.5; margin: 0 0 18px; }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 14px 0 6px; }
+  input { width: 100%; padding: 13px 14px; font-size: 15px; color: var(--text);
+    background: #141420; border: 1px solid var(--line); border-radius: 11px; outline: none; }
+  input:focus { border-color: var(--magenta); }
+  button { width: 100%; padding: 14px; font-size: 15px; font-weight: 600; border: none;
+    border-radius: 11px; cursor: pointer; margin-top: 16px; color: #fff;
+    background: linear-gradient(90deg, var(--magenta), var(--red)); }
+  button.secondary { background: transparent; border: 1px solid var(--line); color: var(--text); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  button:focus-visible, a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+  .link { display: block; text-align: center; color: var(--cyan); font-size: 14px;
+    margin-top: 16px; cursor: pointer; text-decoration: none; }
+  .plan { display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    width: 100%; padding: 15px 16px; margin-top: 12px; text-align: left;
+    background: #141420; border: 1px solid var(--line); border-radius: 13px; color: var(--text); }
+  .plan:hover, .plan.sel { border-color: var(--magenta); }
+  .plan .name { font-weight: 600; font-size: 15px; }
+  .plan .meta { color: var(--muted); font-size: 12px; }
+  .plan .price { font-weight: 700; font-size: 16px; white-space: nowrap; }
+  .err { color: #ffb3bd; font-size: 13px; margin-top: 12px; text-align: center; min-height: 18px; }
+  .spin { width: 34px; height: 34px; margin: 20px auto; border: 3px solid var(--line);
+    border-top-color: var(--magenta); border-radius: 50%; animation: spin 0.9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .hidden { display: none; }
+  @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+</style>
+</head>
+<body>
+  <div class="card">
+    <img class="logo" src="icon.png" alt="">
+    <div class="brand">MK-Flix</div>
+
+    <!-- checking -->
+    <section data-view="loading">
+      <div class="spin"></div>
+      <p class="sub">Checking your account…</p>
+    </section>
+
+    <!-- onboarding -->
+    <section data-view="welcome" class="hidden">
+      <h1>Welcome to MK-Flix</h1>
+      <p class="sub">An ad-free way to watch, on your TV, desktop and phone.</p>
+      <div class="note">
+        <strong>You also need a CineJoy account.</strong> MK-Flix plays content
+        from cinejoy.pk, which gives you a 16-digit account number when you
+        register there. Keep that number safe — it is how you sign in to CineJoy.
+      </div>
+      <button data-go="register">Create a MK-Flix account</button>
+      <a class="link" data-go="login">I already have one — sign in</a>
+    </section>
+
+    <!-- register / login -->
+    <section data-view="auth" class="hidden">
+      <h1 id="auth-title">Create your account</h1>
+      <p class="sub" id="auth-sub">Use your email and a password.</p>
+      <label for="email">Email</label>
+      <input id="email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com">
+      <label for="password">Password</label>
+      <input id="password" type="password" autocomplete="current-password" placeholder="••••••••">
+      <div class="err" id="auth-err"></div>
+      <button id="auth-submit">Continue</button>
+      <a class="link" id="auth-toggle">Have an account? Sign in</a>
+    </section>
+
+    <!-- paywall -->
+    <section data-view="plans" class="hidden">
+      <h1>Choose a plan</h1>
+      <p class="sub">Pay with M-Pesa. Your subscription starts right away.</p>
+      <div id="plan-list"></div>
+      <label for="phone" style="margin-top:18px">M-Pesa phone number</label>
+      <input id="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="07XX XXX XXX">
+      <div class="err" id="pay-err"></div>
+      <button id="pay-btn" disabled>Pay</button>
+      <a class="link" data-go="cinejoyid">Save my CineJoy number</a>
+      <a class="link" id="logout-1">Sign out</a>
+    </section>
+
+    <!-- paying -->
+    <section data-view="paying" class="hidden">
+      <div class="spin"></div>
+      <h1>Check your phone</h1>
+      <p class="sub">Enter your M-Pesa PIN to approve the payment. This can take a
+        few seconds.</p>
+      <div class="err" id="poll-err"></div>
+    </section>
+
+    <!-- save cinejoy number -->
+    <section data-view="cinejoyid" class="hidden">
+      <h1>Your CineJoy number</h1>
+      <p class="sub">Save your 16-digit CineJoy account number here so you can
+        recover it if you forget it. It is stored encrypted.</p>
+      <label for="cjnum">CineJoy account number</label>
+      <input id="cjnum" type="text" inputmode="numeric" maxlength="19" placeholder="16 digits">
+      <div class="err" id="cj-err"></div>
+      <button id="cj-save">Save</button>
+      <a class="link" id="cj-back">Back</a>
+    </section>
+
+    <!-- active -->
+    <section data-view="active" class="hidden">
+      <h1>You're all set</h1>
+      <p class="sub" id="active-sub">Your subscription is active.</p>
+      <button id="continue-btn">Continue to MK-Flix</button>
+      <a class="link" data-go="cinejoyid">Save my CineJoy number</a>
+    </section>
+
+    <!-- can't reach backend -->
+    <section data-view="retry" class="hidden">
+      <h1>Can't reach MK-Flix</h1>
+      <p class="sub">We couldn't check your subscription. Check your connection
+        and try again.</p>
+      <button id="retry-btn">Try again</button>
+    </section>
+  </div>
+
+<script>
+(function () {
+  "use strict";
+
+  // --- Configuration -------------------------------------------------------
+  // Point this at your deployed backend before shipping. During testing you can
+  // override it without editing this file, from the page console:
+  //   localStorage.setItem('mkflixApiBase', 'http://10.0.2.2:8000/api'); location.reload();
+  // (Android emulator reaches the host machine at 10.0.2.2; desktop uses 127.0.0.1.)
+  var DEFAULT_API_BASE = "https://api.mk-flix.example/api";
+  var CINEJOY_URL = "https://cinejoy.pk/";
+
+  function apiBase() {
+    try {
+      var q = new URLSearchParams(location.search).get("api");
+      if (q) return q.replace(/\/$/, "");
+      var saved = localStorage.getItem("mkflixApiBase");
+      if (saved) return saved.replace(/\/$/, "");
+    } catch (e) {}
+    return DEFAULT_API_BASE.replace(/\/$/, "");
+  }
+  var API = apiBase();
+
+  // --- Token storage -------------------------------------------------------
+  function getAccess() { try { return localStorage.getItem("mkflix_access"); } catch (e) { return null; } }
+  function getRefresh() { try { return localStorage.getItem("mkflix_refresh"); } catch (e) { return null; } }
+  function setTokens(access, refresh) {
+    try {
+      if (access) localStorage.setItem("mkflix_access", access);
+      if (refresh) localStorage.setItem("mkflix_refresh", refresh);
+    } catch (e) {}
+  }
+  function clearTokens() {
+    try { localStorage.removeItem("mkflix_access"); localStorage.removeItem("mkflix_refresh"); } catch (e) {}
+  }
+
+  // --- Fetch helpers -------------------------------------------------------
+  function request(path, opts) {
+    opts = opts || {};
+    var headers = { "Content-Type": "application/json" };
+    if (opts.auth) {
+      var t = getAccess();
+      if (t) headers["Authorization"] = "Bearer " + t;
+    }
+    return fetch(API + path, {
+      method: opts.method || "GET",
+      headers: headers,
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+    }).then(function (res) {
+      return res.text().then(function (text) {
+        var data = null;
+        try { data = text ? JSON.parse(text) : null; } catch (e) {}
+        return { ok: res.ok, status: res.status, data: data };
+      });
+    });
+  }
+
+  // Authenticated request that refreshes the access token once on a 401.
+  function authed(path, opts) {
+    opts = opts || {};
+    opts.auth = true;
+    return request(path, opts).then(function (r) {
+      if (r.status !== 401) return r;
+      var refresh = getRefresh();
+      if (!refresh) return r;
+      return request("/auth/refresh", { method: "POST", body: { refresh: refresh } }).then(function (rr) {
+        if (rr.ok && rr.data && rr.data.access) {
+          setTokens(rr.data.access, null);
+          return request(path, opts);
+        }
+        clearTokens();
+        return r;
+      });
+    });
+  }
+
+  // --- View switching ------------------------------------------------------
+  function show(name) {
+    var views = document.querySelectorAll("[data-view]");
+    for (var i = 0; i < views.length; i++) {
+      views[i].classList.toggle("hidden", views[i].getAttribute("data-view") !== name);
+    }
+    var first = document.querySelector('[data-view="' + name + '"] input, [data-view="' + name + '"] button');
+    if (first && first.tagName === "INPUT") { try { first.focus(); } catch (e) {} }
+  }
+
+  function gotoSite() { window.location.href = CINEJOY_URL; }
+
+  // --- Flow ----------------------------------------------------------------
+  function checkAccess() {
+    show("loading");
+    if (!getAccess()) { show("welcome"); return; }
+    authed("/me/subscription").then(function (r) {
+      if (r.ok && r.data) {
+        if (r.data.active) { showActive(r.data); }
+        else { showPaywall(); }
+      } else if (r.status === 401) {
+        clearTokens(); show("welcome");
+      } else {
+        show("retry");
+      }
+    }).catch(function () { show("retry"); });
+  }
+
+  function showActive(sub) {
+    var end = sub.current_period_end ? new Date(sub.current_period_end) : null;
+    document.getElementById("active-sub").textContent = end
+      ? "Your " + (sub.plan ? sub.plan.name.toLowerCase() + " " : "") + "subscription is active until " + end.toLocaleDateString() + "."
+      : "Your subscription is active.";
+    show("active");
+  }
+
+  // --- Auth ----------------------------------------------------------------
+  var authMode = "register";
+  function openAuth(mode) {
+    authMode = mode;
+    document.getElementById("auth-title").textContent = mode === "register" ? "Create your account" : "Welcome back";
+    document.getElementById("auth-sub").textContent = mode === "register"
+      ? "Use your email and a password." : "Sign in with your email and password.";
+    document.getElementById("auth-toggle").textContent = mode === "register"
+      ? "Have an account? Sign in" : "New here? Create an account";
+    document.getElementById("auth-submit").textContent = mode === "register" ? "Create account" : "Sign in";
+    document.getElementById("password").setAttribute("autocomplete", mode === "register" ? "new-password" : "current-password");
+    document.getElementById("auth-err").textContent = "";
+    show("auth");
+  }
+
+  function submitAuth() {
+    var email = document.getElementById("email").value.trim();
+    var password = document.getElementById("password").value;
+    var err = document.getElementById("auth-err");
+    var btn = document.getElementById("auth-submit");
+    err.textContent = "";
+    if (!email || !password) { err.textContent = "Enter your email and password."; return; }
+    btn.disabled = true;
+    var path = authMode === "register" ? "/auth/register" : "/auth/login";
+    request(path, { method: "POST", body: { email: email, password: password } }).then(function (r) {
+      btn.disabled = false;
+      if (r.ok) {
+        var tokens = r.data.tokens || r.data; // register wraps tokens; login is flat
+        setTokens(tokens.access, tokens.refresh);
+        checkAccess();
+      } else {
+        err.textContent = firstError(r.data) || "That didn't work. Please try again.";
+      }
+    }).catch(function () { btn.disabled = false; err.textContent = "Can't reach MK-Flix. Check your connection."; });
+  }
+
+  function firstError(data) {
+    if (!data) return null;
+    if (data.detail) return data.detail;
+    for (var k in data) {
+      if (Array.isArray(data[k])) return data[k][0];
+      if (typeof data[k] === "string") return data[k];
+    }
+    return null;
+  }
+
+  // --- Paywall -------------------------------------------------------------
+  var selectedPlan = null;
+  function showPaywall() {
+    selectedPlan = null;
+    document.getElementById("pay-btn").disabled = true;
+    document.getElementById("pay-err").textContent = "";
+    var list = document.getElementById("plan-list");
+    list.innerHTML = '<div class="spin"></div>';
+    request("/plans").then(function (r) {
+      if (!r.ok || !Array.isArray(r.data)) { list.innerHTML = ""; document.getElementById("pay-err").textContent = "Couldn't load plans."; return; }
+      list.innerHTML = "";
+      r.data.forEach(function (plan) {
+        var b = document.createElement("button");
+        b.className = "plan";
+        var cadence = { WEEK: "weekly", MONTH: "monthly" }[plan.interval] || plan.interval.toLowerCase();
+        b.innerHTML = '<span><span class="name">' + esc(plan.name) + '</span><br>' +
+          '<span class="meta">Billed ' + esc(cadence) + '</span></span>' +
+          '<span class="price">' + esc(plan.currency) + " " + esc(plan.price) + "</span>";
+        b.addEventListener("click", function () { selectPlan(plan, b); });
+        list.appendChild(b);
+      });
+    }).catch(function () { list.innerHTML = ""; document.getElementById("pay-err").textContent = "Can't reach MK-Flix."; });
+    show("plans");
+  }
+
+  function selectPlan(plan, el) {
+    selectedPlan = plan;
+    var all = document.querySelectorAll("#plan-list .plan");
+    for (var i = 0; i < all.length; i++) all[i].classList.remove("sel");
+    el.classList.add("sel");
+    document.getElementById("pay-btn").disabled = false;
+  }
+
+  function pay() {
+    var phone = document.getElementById("phone").value.trim();
+    var err = document.getElementById("pay-err");
+    err.textContent = "";
+    if (!selectedPlan) { err.textContent = "Choose a plan first."; return; }
+    if (!phone) { err.textContent = "Enter your M-Pesa phone number."; return; }
+    var btn = document.getElementById("pay-btn");
+    btn.disabled = true;
+    authed("/payments/mpesa/stk", { method: "POST", body: { plan_code: selectedPlan.code, phone_number: phone } }).then(function (r) {
+      btn.disabled = false;
+      if (r.ok && r.data && r.data.payment) {
+        show("paying");
+        pollPayment(r.data.payment.id, 0);
+      } else {
+        err.textContent = firstError(r.data) || "Couldn't start the payment.";
+      }
+    }).catch(function () { btn.disabled = false; err.textContent = "Can't reach MK-Flix."; });
+  }
+
+  // Poll the payment until the callback settles it (or we give up).
+  function pollPayment(id, tries) {
+    if (tries > 30) { // ~90s
+      document.getElementById("poll-err").textContent = "Still waiting. You can go back and check again shortly.";
+      setTimeout(showPaywall, 2500);
+      return;
+    }
+    authed("/payments/" + id).then(function (r) {
+      if (r.ok && r.data) {
+        var s = r.data.status;
+        if (s === "SUCCEEDED") { checkAccess(); return; }
+        if (s === "FAILED" || s === "CANCELLED") {
+          document.getElementById("poll-err").textContent = "Payment wasn't completed.";
+          setTimeout(showPaywall, 2500);
+          return;
+        }
+      }
+      setTimeout(function () { pollPayment(id, tries + 1); }, 3000);
+    }).catch(function () { setTimeout(function () { pollPayment(id, tries + 1); }, 3000); });
+  }
+
+  // --- CineJoy number ------------------------------------------------------
+  var cinejoyReturn = "welcome";
+  function openCinejoy(from) {
+    cinejoyReturn = from;
+    document.getElementById("cj-err").textContent = "";
+    var input = document.getElementById("cjnum");
+    input.value = "";
+    show("cinejoyid");
+    authed("/auth/me/cinejoy-account").then(function (r) {
+      if (r.ok && r.data && r.data.account_number) input.value = r.data.account_number;
+    }).catch(function () {});
+  }
+
+  function saveCinejoy() {
+    var num = document.getElementById("cjnum").value.replace(/\s+/g, "");
+    var err = document.getElementById("cj-err");
+    err.textContent = "";
+    if (!/^\d{16}$/.test(num)) { err.textContent = "The number must be exactly 16 digits."; return; }
+    var btn = document.getElementById("cj-save");
+    btn.disabled = true;
+    authed("/auth/me/cinejoy-account", { method: "PUT", body: { account_number: num } }).then(function (r) {
+      btn.disabled = false;
+      if (r.ok) { backFromCinejoy(); }
+      else { err.textContent = firstError(r.data) || "Couldn't save that."; }
+    }).catch(function () { btn.disabled = false; err.textContent = "Can't reach MK-Flix."; });
+  }
+
+  function backFromCinejoy() {
+    if (cinejoyReturn === "active") { checkAccess(); }
+    else { showPaywall(); }
+  }
+
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+
+  function logout() { clearTokens(); show("welcome"); }
+
+  // --- Wiring --------------------------------------------------------------
+  document.addEventListener("click", function (e) {
+    var go = e.target.getAttribute && e.target.getAttribute("data-go");
+    if (!go) return;
+    e.preventDefault();
+    if (go === "register" || go === "login") openAuth(go);
+    else if (go === "cinejoyid") openCinejoy(document.querySelector('[data-view="active"]').classList.contains("hidden") ? "plans" : "active");
+  });
+  document.getElementById("auth-submit").addEventListener("click", submitAuth);
+  document.getElementById("auth-toggle").addEventListener("click", function () { openAuth(authMode === "register" ? "login" : "register"); });
+  document.getElementById("password").addEventListener("keydown", function (e) { if (e.key === "Enter") submitAuth(); });
+  document.getElementById("pay-btn").addEventListener("click", pay);
+  document.getElementById("continue-btn").addEventListener("click", gotoSite);
+  document.getElementById("retry-btn").addEventListener("click", checkAccess);
+  document.getElementById("cj-save").addEventListener("click", saveCinejoy);
+  document.getElementById("cj-back").addEventListener("click", backFromCinejoy);
+  document.getElementById("logout-1").addEventListener("click", logout);
+
+  checkAccess();
+})();
+</script>
+</body>
+</html>

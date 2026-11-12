@@ -234,7 +234,10 @@ function createWindow() {
   });
 
   showSplash(win);
-  win.loadURL(HOME_URL);
+  // Start on the account gate, not the site. It checks for an active MK-Flix
+  // subscription against the backend and sends the window to cinejoy.pk itself
+  // (guardNavigation allows that) once the user is signed in and subscribed.
+  win.loadFile(path.join(__dirname, 'mkflix-account.html'));
 }
 
 app.whenReady().then(() => {

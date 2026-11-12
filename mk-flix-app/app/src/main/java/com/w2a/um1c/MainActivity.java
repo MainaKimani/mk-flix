@@ -71,6 +71,10 @@ public class MainActivity extends Activity {
     private static final String HOME_URL = "https://cinejoy.pk/";
     // Shown instead of a failed page; see showErrorPage().
     private static final String ERROR_PAGE = "file:///android_asset/error.html";
+    // The account gate, loaded at startup. It checks the MK-Flix backend for an
+    // active subscription and sends the WebView to HOME_URL itself once the user
+    // is signed in and subscribed; otherwise it handles sign-in and payment.
+    private static final String ACCOUNT_PAGE = "file:///android_asset/mkflix-account.html";
 
     // Page currently being opened, to tell a page's own SSL failure from a
     // failing image or ad on it (onReceivedSslError doesn't say which).
@@ -159,6 +163,12 @@ public class MainActivity extends Activity {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         }
+        // The account gate (mkflix-account.html) is a local asset that calls the
+        // MK-Flix backend with fetch(). Allowing cross-origin requests from the
+        // file:// origin keeps that from being blocked by CORS. It affects only
+        // our own trusted asset page; once the gate hands off to cinejoy.pk the
+        // origin is https and this no longer applies.
+        settings.setAllowUniversalAccessFromFileURLs(true);
 
         UiModeManager uiMode = (UiModeManager) getSystemService(UI_MODE_SERVICE);
         isTv = uiMode != null && uiMode.getCurrentModeType() == Configuration.UI_MODE_TYPE_TELEVISION;
@@ -395,8 +405,7 @@ public class MainActivity extends Activity {
         if (savedInstanceState != null) {
             webView.restoreState(savedInstanceState);
         } else {
-            loadingUrl = HOME_URL;
-            webView.loadUrl(HOME_URL);
+            webView.loadUrl(ACCOUNT_PAGE);
         }
     }
 
