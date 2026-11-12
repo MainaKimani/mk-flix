@@ -1,6 +1,9 @@
 package com.w2a.um1c;
 
 import android.Manifest;
+import android.animation.ObjectAnimator;
+import android.animation.PropertyValuesHolder;
+import android.animation.ValueAnimator;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.DownloadManager;
@@ -13,8 +16,14 @@ import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.LinearGradient;
+import android.graphics.Matrix;
 import android.graphics.Paint;
+import android.graphics.RectF;
+import android.graphics.Shader;
 import android.os.SystemClock;
+import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.ViewConfiguration;
@@ -25,8 +34,10 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
 import android.view.Window;
 import android.view.WindowManager;
+import android.view.animation.AccelerateDecelerateInterpolator;
 import android.webkit.CookieManager;
 import android.webkit.DownloadListener;
 import android.webkit.SslErrorHandler;
@@ -40,6 +51,8 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.Toast;
 
 import org.json.JSONObject;
@@ -98,6 +111,19 @@ public class MainActivity extends Activity {
 
     private static final int REQUEST_STORAGE_PERMISSION = 1;
 
+    // Startup splash, shown when the app is opened (not when Android
+    // restores it after a rotation or a trip to the background). See
+    // showSplash().
+    private FrameLayout splash;
+    private long splashShownAt;
+    private ObjectAnimator splashPulse;
+    private final Runnable splashTimeout = this::dismissSplash;
+    // Shown at least this long, so it reads as an intro rather than a flicker.
+    private static final long SPLASH_MIN_MS = 3000;
+    // Taken down after this long even if the page is still loading, so a
+    // slow network shows the site's own progress instead of a stuck splash.
+    private static final long SPLASH_MAX_MS = 15000;
+
     @SuppressLint("SetJavaScriptEnabled")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -106,6 +132,12 @@ public class MainActivity extends Activity {
         setContentView(R.layout.activity_main);
 
         webView = findViewById(R.id.webview);
+        // The WebView paints white until a page draws, whatever the layout's
+        // background says; that was the white flash at startup.
+        webView.setBackgroundColor(Color.BLACK);
+        if (savedInstanceState == null) {
+            showSplash();
+        }
         loadAdBlockList();
         footerJs = readAsset("mkflix-footer.js");
         String logoCss = readAsset("mkflix-logo.css");
@@ -246,6 +278,11 @@ public class MainActivity extends Activity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
+                // First page is in: hand over from the splash. Not for a page
+                // that failed, which is about to be replaced by the error screen.
+                if (isErrorPage(url) || !sameUrl(url, errorPageFailedUrl)) {
+                    dismissSplash();
+                }
                 try {
                     view.evaluateJavascript(adCleanupJs(), null);
                     if (isCineJoyUrl(url)) {
@@ -360,6 +397,196 @@ public class MainActivity extends Activity {
         } else {
             loadingUrl = HOME_URL;
             webView.loadUrl(HOME_URL);
+        }
+    }
+
+    /**
+     * Startup splash: the MK-Flix mark, gently pulsing, with the wordmark and
+     * a loading bar under it, until the first page has loaded.
+     *
+     * The window background (res/drawable/splash_window.xml) already shows
+     * the mark from the moment the app opens, while the WebView starts up,
+     * and on Android 12+ the system splash shows the icon in the same spot.
+     * This view takes over from them without the mark moving, then fades
+     * out to reveal the page.
+     */
+    private void showSplash() {
+        float dp = getResources().getDisplayMetrics().density;
+        splash = new FrameLayout(this);
+        splash.setBackgroundColor(Color.BLACK);
+        // Swallows touches meant for the page underneath while it shows.
+        splash.setClickable(true);
+
+        FrameLayout group = new FrameLayout(this);
+        splash.addView(group, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        ImageView logo = new ImageView(this);
+        logo.setImageResource(R.drawable.splash_logo);
+        int logoSize = Math.round(240 * dp);
+        group.addView(logo, new FrameLayout.LayoutParams(logoSize, logoSize, Gravity.CENTER));
+
+        LinearLayout below = new LinearLayout(this);
+        below.setOrientation(LinearLayout.VERTICAL);
+        below.setGravity(Gravity.CENTER_HORIZONTAL);
+        ImageView word = new ImageView(this);
+        word.setImageResource(R.drawable.splash_wordmark);
+        word.setAlpha(0f);
+        word.setTranslationY(12 * dp);
+        below.addView(word, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, Math.round(32 * dp)));
+        LoadingBar bar = new LoadingBar(this);
+        bar.setAlpha(0f);
+        LinearLayout.LayoutParams barParams = new LinearLayout.LayoutParams(
+                Math.round(140 * dp), Math.round(3 * dp));
+        barParams.topMargin = Math.round(18 * dp);
+        below.addView(bar, barParams);
+        // Placed under the mark once the size is known (splashAligner).
+        group.addView(below, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER_HORIZONTAL | Gravity.TOP));
+
+        ((ViewGroup) webView.getParent()).addView(splash, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        splash.getViewTreeObserver().addOnPreDrawListener(splashAligner);
+
+        word.animate().alpha(1f).translationY(0f)
+                .setStartDelay(250).setDuration(500)
+                .setInterpolator(new AccelerateDecelerateInterpolator());
+        bar.animate().alpha(1f).setStartDelay(550).setDuration(400);
+        // Same pulse as the site's loading screen (mkflix-pulse in
+        // mkflix-logo.css), so the two read as one.
+        splashPulse = ObjectAnimator.ofPropertyValuesHolder(logo,
+                PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, 0.94f),
+                PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, 0.94f),
+                PropertyValuesHolder.ofFloat(View.ALPHA, 1f, 0.7f));
+        splashPulse.setDuration(800);
+        splashPulse.setStartDelay(300);
+        splashPulse.setRepeatCount(ValueAnimator.INFINITE);
+        splashPulse.setRepeatMode(ValueAnimator.REVERSE);
+        splashPulse.setInterpolator(new AccelerateDecelerateInterpolator());
+        splashPulse.start();
+
+        splashShownAt = SystemClock.uptimeMillis();
+        webView.postDelayed(splashTimeout, SPLASH_MAX_MS);
+    }
+
+    /**
+     * Runs once, just before the splash is first drawn. The window background
+     * centres the mark in the whole window, but the splash sits below the
+     * status bar (phones), so shift its contents to line up with that centre,
+     * and put the wordmark and bar under the mark (about 52 dp below centre).
+     */
+    private final ViewTreeObserver.OnPreDrawListener splashAligner =
+            new ViewTreeObserver.OnPreDrawListener() {
+        @Override
+        public boolean onPreDraw() {
+            if (splash == null) {
+                return true;
+            }
+            splash.getViewTreeObserver().removeOnPreDrawListener(this);
+            float dp = getResources().getDisplayMetrics().density;
+            View group = splash.getChildAt(0);
+            View below = ((ViewGroup) group).getChildAt(1);
+            View decor = getWindow().getDecorView();
+            int[] at = new int[2];
+            splash.getLocationInWindow(at);
+            group.setTranslationX(decor.getWidth() / 2f - (at[0] + splash.getWidth() / 2f));
+            group.setTranslationY(decor.getHeight() / 2f - (at[1] + splash.getHeight() / 2f));
+            below.setY(splash.getHeight() / 2f + 76 * dp);
+            return true;
+        }
+    };
+
+    /** Fade the splash out, once it has been up for SPLASH_MIN_MS. */
+    private void dismissSplash() {
+        if (splash == null) {
+            return;
+        }
+        final FrameLayout leaving = splash;
+        splash = null;
+        webView.removeCallbacks(splashTimeout);
+        long wait = Math.max(0, SPLASH_MIN_MS - (SystemClock.uptimeMillis() - splashShownAt));
+        leaving.animate().alpha(0f).setStartDelay(wait).setDuration(450)
+                .withEndAction(() -> {
+                    if (splashPulse != null) {
+                        splashPulse.cancel();
+                        splashPulse = null;
+                    }
+                    ViewGroup parent = (ViewGroup) leaving.getParent();
+                    if (parent != null) {
+                        parent.removeView(leaving);
+                    }
+                });
+    }
+
+    /**
+     * The splash's loading bar: a faint track with a neon segment (the
+     * mark's cyan, magenta and red) sweeping across it.
+     */
+    static final class LoadingBar extends View {
+        private final Paint track = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint segment = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Matrix shift = new Matrix();
+        private final RectF rect = new RectF();
+        private LinearGradient gradient;
+        private ValueAnimator sweep;
+        private float phase;
+
+        LoadingBar(Context context) {
+            super(context);
+            track.setColor(0x26FFFFFF);
+        }
+
+        @Override
+        protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+            super.onSizeChanged(w, h, oldw, oldh);
+            gradient = new LinearGradient(0, 0, w * 0.4f, 0,
+                    new int[]{0xFF00E5FF, 0xFFE040FB, 0xFFFF3D57}, null, Shader.TileMode.CLAMP);
+            segment.setShader(gradient);
+        }
+
+        @Override
+        protected void onAttachedToWindow() {
+            super.onAttachedToWindow();
+            sweep = ValueAnimator.ofFloat(0f, 1f);
+            sweep.setDuration(1300);
+            sweep.setRepeatCount(ValueAnimator.INFINITE);
+            sweep.setInterpolator(new AccelerateDecelerateInterpolator());
+            sweep.addUpdateListener(a -> {
+                phase = (float) a.getAnimatedValue();
+                invalidate();
+            });
+            sweep.start();
+        }
+
+        @Override
+        protected void onDetachedFromWindow() {
+            if (sweep != null) {
+                sweep.cancel();
+                sweep = null;
+            }
+            super.onDetachedFromWindow();
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            float w = getWidth(), h = getHeight(), r = h / 2f;
+            rect.set(0, 0, w, h);
+            canvas.drawRoundRect(rect, r, r, track);
+            if (gradient == null) {
+                return;
+            }
+            float len = w * 0.4f;
+            float left = -len + (w + len) * phase;
+            rect.set(Math.max(0, left), 0, Math.min(w, left + len), h);
+            if (rect.width() <= 0) {
+                return;
+            }
+            shift.setTranslate(left, 0);
+            gradient.setLocalMatrix(shift);
+            canvas.drawRoundRect(rect, r, r, segment);
         }
     }
 
@@ -940,7 +1167,12 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (splashPulse != null) {
+            splashPulse.cancel();
+            splashPulse = null;
+        }
         if (webView != null) {
+            webView.removeCallbacks(splashTimeout);
             webView.loadUrl("about:blank");
             webView.stopLoading();
             webView.setWebChromeClient(null);

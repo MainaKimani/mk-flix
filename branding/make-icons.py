@@ -14,6 +14,8 @@ Writes:
                                                         cinejoy.pk's (header, loading screen)
   mk-flix-app/.../assets/icon.png                      icon on the Android error screen
   mk-flix-app/.../drawable-{xhdpi,xxxhdpi}/tv_banner.png  Android TV home-screen banner
+  mk-flix-app/.../drawable-{xhdpi,xxxhdpi}/splash_logo.png      startup screen mark
+  mk-flix-app/.../drawable-{xhdpi,xxxhdpi}/splash_wordmark.png  startup screen "MK-Flix"
 
 The master is a glowing mark on a transparent background, designed for dark
 surroundings. The desktop icons keep it transparent. Android legacy icons
@@ -167,7 +169,36 @@ def main():
         (RES / folder).mkdir(exist_ok=True)
         tv_banner(mark, 320 * scale, 180 * scale).save(RES / folder / "tv_banner.png", optimize=True)
 
+    # Android startup screen (MainActivity's splash). splash_logo is laid
+    # out exactly like the system splash screen of Android 12+, which shows
+    # the adaptive icon's foreground on a 240 dp canvas: same fill, same
+    # circumcentre shift. So the system splash, the window background and
+    # the app's animated splash all show the mark in the same place, with no
+    # jump between them. The wordmark sits under it and fades in.
+    for folder, scale in (("drawable-xhdpi", 1), ("drawable-xxxhdpi", 2)):
+        place(mark, 480 * scale, ADAPTIVE_FILL, shift=CIRCLE_SHIFT).save(
+            RES / folder / "splash_logo.png", optimize=True)
+        wordmark(mark, 64 * scale).save(RES / folder / "splash_wordmark.png", optimize=True)
+
     print("icons written from", MASTER.relative_to(ROOT))
+
+
+def wordmark(mark, size):
+    """ "MK-Flix" in the banner's gradient, on transparent, cropped to the text. """
+    font = ImageFont.truetype(str(FONT), size)
+    left, top, right, bottom = font.getbbox("MK-Flix")
+    pad = round(size * 0.1)
+    w, h = right - left + 2 * pad, bottom - top + 2 * pad
+    mask = Image.new("L", (w, h), 0)
+    ImageDraw.Draw(mask).text((pad - left, pad - top), "MK-Flix", font=font, fill=255)
+    gradient = Image.new("RGBA", (w, h))
+    gd = ImageDraw.Draw(gradient)
+    stops = sample_neon(mark)
+    for x in range(w):
+        gd.line([(x, 0), (x, h)], fill=lerp_stops(stops, min(1.0, max(0.0, (x - pad) / (w - 2 * pad)))))
+    out = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    out.paste(gradient, (0, 0), mask)
+    return out
 
 
 def tv_banner(mark, w, h):

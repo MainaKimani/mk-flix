@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ shows its own splash screen (the app icon on a plain
+         colour) before the window background. Keep that black: with a
+         drawable window background it would otherwise use the theme's
+         default colour. The icon it shows lines up with splash_logo. -->
+    <style name="Theme.MKFlix" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@drawable/splash_window</item>
+        <item name="android:windowSplashScreenBackground">@color/black</item>
+        <item name="android:statusBarColor">@color/black</item>
+        <item name="android:navigationBarColor">@color/black</item>
+    </style>
+</resources>

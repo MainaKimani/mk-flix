@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The window background: what Android draws the instant the app is
+     opened, while the WebView is still starting up (seconds on some TVs).
+     The mark is at the same size and place as MainActivity's animated
+     splash, which takes over from it without a jump. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/black" />
+    <item
+        android:width="240dp"
+        android:height="240dp"
+        android:gravity="center"
+        android:drawable="@drawable/splash_logo" />
+</layer-list>
