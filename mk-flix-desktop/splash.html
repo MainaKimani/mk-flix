@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<!-- Startup splash, drawn over the main window by main.js while cinejoy.pk
+     loads underneath. Matches the Android app's splash: the mark pulsing
+     like the site's loading screen (mkflix-pulse in mkflix-logo.css), the
+     wordmark fading in under it, and a neon loading bar. main.js adds the
+     "leaving" class to fade it out, then removes it. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'unsafe-inline'">
+<title>MK-Flix</title>
+<style>
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: #000;
+    overflow: hidden;
+    user-select: none;
+    cursor: default;
+  }
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.45s ease;
+  }
+  body.leaving { opacity: 0; }
+  .stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .mark {
+    width: 180px;
+    height: 180px;
+    animation: pulse 1.6s ease-in-out 0.3s infinite;
+  }
+  .word {
+    height: 40px;
+    margin-top: 18px;
+    opacity: 0;
+    animation: rise 0.5s ease 0.25s forwards;
+  }
+  .bar {
+    position: relative;
+    width: 160px;
+    height: 3px;
+    margin-top: 22px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.15);
+    overflow: hidden;
+    opacity: 0;
+    animation: appear 0.4s ease 0.55s forwards;
+  }
+  .bar::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -40%;
+    width: 40%;
+    border-radius: 2px;
+    background: linear-gradient(90deg, #00e5ff, #e040fb, #ff3d57);
+    animation: sweep 1.3s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.7; transform: scale(0.94); }
+  }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes appear { to { opacity: 1; } }
+  @keyframes sweep { to { left: 100%; } }
+  @media (prefers-reduced-motion: reduce) {
+    .mark, .bar::after { animation: none; }
+    .bar::after { left: 30%; }
+  }
+</style>
+</head>
+<body>
+  <div class="stack">
+    <img class="mark" src="icon.png" alt="">
+    <img class="word" src="splash-wordmark.png" alt="MK-Flix">
+    <div class="bar"></div>
+  </div>
+</body>
+</html>

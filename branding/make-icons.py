@@ -16,6 +16,7 @@ Writes:
   mk-flix-app/.../drawable-{xhdpi,xxxhdpi}/tv_banner.png  Android TV home-screen banner
   mk-flix-app/.../drawable-{xhdpi,xxxhdpi}/splash_logo.png      startup screen mark
   mk-flix-app/.../drawable-{xhdpi,xxxhdpi}/splash_wordmark.png  startup screen "MK-Flix"
+  mk-flix-desktop/splash-wordmark.png                  desktop startup screen "MK-Flix"
 
 The master is a glowing mark on a transparent background, designed for dark
 surroundings. The desktop icons keep it transparent. Android legacy icons
@@ -179,6 +180,9 @@ def main():
         place(mark, 480 * scale, ADAPTIVE_FILL, shift=CIRCLE_SHIFT).save(
             RES / folder / "splash_logo.png", optimize=True)
         wordmark(mark, 64 * scale).save(RES / folder / "splash_wordmark.png", optimize=True)
+    # The desktop splash (splash.html) uses icon.png for the mark, shown at
+    # 180 px, and this wordmark at 40 px tall, sharp up to 3x displays.
+    wordmark(mark, 128).save(DESKTOP / "splash-wordmark.png", optimize=True)
 
     print("icons written from", MASTER.relative_to(ROOT))
 

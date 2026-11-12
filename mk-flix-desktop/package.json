@@ -29,6 +29,8 @@
       "adblock-hosts.txt",
       "icon.png",
       "error.html",
+      "splash.html",
+      "splash-wordmark.png",
       "package.json"
     ],
     "directories": {

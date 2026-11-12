@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, session, shell } = require('electron');
+const { app, BrowserWindow, WebContentsView, ipcMain, session, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -149,6 +149,73 @@ function setUpSession() {
   ses.setPermissionCheckHandler((_wc, permission) => ALLOWED_PERMISSIONS.has(permission));
 }
 
+// Startup splash (splash.html), the same as the Android app's: shown over
+// the main window from the moment it opens while cinejoy.pk loads
+// underneath, then faded out. It stays up at least SPLASH_MIN_MS, so it reads
+// as an intro rather than a flicker, and at most SPLASH_MAX_MS, so a slow
+// network shows the site's own progress instead of a stuck splash.
+const SPLASH_MIN_MS = 3000;
+const SPLASH_MAX_MS = 15000;
+const SPLASH_FADE_MS = 450; // matches the transition in splash.html
+
+function showSplash(win) {
+  const splash = new WebContentsView();
+  splash.setBackgroundColor('#000000');
+  const fit = () => {
+    const [width, height] = win.getContentSize();
+    splash.setBounds({ x: 0, y: 0, width, height });
+  };
+  fit();
+  win.on('resize', fit);
+  win.contentView.addChildView(splash);
+  splash.webContents.loadFile(path.join(__dirname, 'splash.html'));
+  // Once its page is closed, Electron sets splash.webContents to undefined,
+  // so check before touching it again.
+  const closeSplash = () => {
+    const contents = splash.webContents;
+    if (contents && !contents.isDestroyed()) contents.close();
+  };
+
+  // Open the window once the splash can paint, so it starts on the splash
+  // rather than an empty black frame. The timer covers a splash that never
+  // loads, so the window still appears.
+  const show = () => {
+    if (!win.isDestroyed() && !win.isVisible()) win.show();
+  };
+  splash.webContents.once('did-finish-load', show);
+  const showFallback = setTimeout(show, 1500);
+
+  const shownAt = Date.now();
+  let dismissed = false;
+  const dismiss = () => {
+    if (dismissed) return;
+    dismissed = true;
+    clearTimeout(maxTimer);
+    const wait = Math.max(0, SPLASH_MIN_MS - (Date.now() - shownAt));
+    setTimeout(() => {
+      if (win.isDestroyed()) return;
+      splash.webContents.executeJavaScript("document.body.classList.add('leaving')").catch(() => {});
+      setTimeout(() => {
+        if (win.isDestroyed()) return;
+        win.removeListener('resize', fit);
+        win.contentView.removeChildView(splash);
+        closeSplash();
+        // Give the page keyboard focus, which the splash may have held.
+        win.webContents.focus();
+      }, SPLASH_FADE_MS);
+    }, wait);
+  };
+  const maxTimer = setTimeout(dismiss, SPLASH_MAX_MS);
+  // The first page in, whether cinejoy.pk or the error screen (a failed
+  // load fires did-fail-load instead, then error.html finishes loading).
+  win.webContents.once('did-finish-load', dismiss);
+  win.once('closed', () => {
+    clearTimeout(maxTimer);
+    clearTimeout(showFallback);
+    closeSplash();
+  });
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
@@ -160,10 +227,13 @@ function createWindow() {
     // Windows uses the multi-size .ico; Linux can't load .ico for window icons.
     icon: path.join(__dirname, process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
     backgroundColor: '#000000',
+    // Shown by showSplash() once the splash can paint.
+    show: false,
     // Popups the site opens inherit these, preload included.
     webPreferences: { preload: path.join(__dirname, 'preload.js') },
   });
 
+  showSplash(win);
   win.loadURL(HOME_URL);
 }
 
