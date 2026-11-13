@@ -16,12 +16,18 @@ Downloads are on the
 - `error.html` — shown instead of a blank window when cinejoy.pk can't load
   (network block, offline, ...), with a Retry button (shared with the Android app)
 - `mkflix-account.html` — the account gate, shown at startup instead of
-  cinejoy.pk. It checks the [MK-Flix backend](../../mk-flix-be) for an active
-  subscription (JWT kept in localStorage) and sends the window to cinejoy.pk
-  only once the user is signed in and subscribed; otherwise it handles
-  onboarding, M-Pesa payment and saving the user's CineJoy number. Set the
-  backend URL in `DEFAULT_API_BASE` before shipping. Shared, identical, with
-  the Android app
+  cinejoy.pk. It checks the [MK-Flix backend](../../mk-flix-be) for a
+  subscription (JWT kept in localStorage) and handles onboarding, M-Pesa payment
+  and saving the user's CineJoy number. A signed-in user may browse without
+  subscribing; playback is gated instead. The backend URL is set by the
+  `MKFLIX_API_BASE` env var or `mkflix-config.json` (`apiBase`) — no editing the
+  page. Shared, identical, with the Android app
+- `mkflix-enforcer.js` — injected into cinejoy.pk pages: browsing is free but
+  playback (a `/watch/` page) needs an active subscription, so it blocks a
+  `/watch/` navigation without one and opens the paywall. Whether the user is
+  subscribed is decided by the main process (`preload.js` exposes `MKFlixNative`;
+  `main.js` holds the session and calls `/me/subscription` itself), so a page on
+  cinejoy.pk can't fake it. Shared, identical, with the Android app
 - `splash.html` — startup splash, the same as the Android app's: the MK-Flix
   mark pulsing, the wordmark and a loading bar, drawn over the window while
   cinejoy.pk loads underneath, then faded out. The window opens straight

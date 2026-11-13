@@ -12,6 +12,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.app.UiModeManager;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
@@ -40,6 +41,7 @@ import android.view.WindowManager;
 import android.view.animation.AccelerateDecelerateInterpolator;
 import android.webkit.CookieManager;
 import android.webkit.DownloadListener;
+import android.webkit.JavascriptInterface;
 import android.webkit.SslErrorHandler;
 import android.webkit.WebBackForwardList;
 import android.webkit.WebResourceError;
@@ -62,6 +64,8 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
@@ -104,6 +108,14 @@ public class MainActivity extends Activity {
     //   the page has loaded.
     private String logoJs = "";
     private String footerJs = "";
+    // Playback gate on cinejoy.pk (assets/mkflix-enforcer.js): blocks /watch/
+    // pages while there is no active subscription and opens the paywall. It
+    // reads the subscription through the MKFlixNative bridge below.
+    private String enforcerJs = "";
+    private final Subscription subscription = new Subscription();
+    // Backend URL the gate uses, from assets/mkflix-config.json (apiBase). Set
+    // by the operator without editing the gate; handed over via getApiBase().
+    private String apiBaseConfig = "";
 
     // Android TV / Google TV. The same APK runs on phones and TVs; on a TV
     // the app adds remote-control support (assets/mkflix-tv.js: desktop
@@ -144,6 +156,13 @@ public class MainActivity extends Activity {
         }
         loadAdBlockList();
         footerJs = readAsset("mkflix-footer.js");
+        enforcerJs = readAsset("mkflix-enforcer.js");
+        apiBaseConfig = readApiBaseConfig();
+        subscription.load();
+        // The gate and the enforcer talk to the app through this. It is exposed
+        // to cinejoy.pk too, but exposes nothing that lets a page there grant
+        // itself a subscription: the app checks the backend for that.
+        webView.addJavascriptInterface(new MkFlixBridge(), "MKFlixNative");
         String logoCss = readAsset("mkflix-logo.css");
         if (!logoCss.isEmpty()) {
             // JSONObject.quote turns the CSS into a safe JavaScript string literal.
@@ -237,17 +256,27 @@ public class MainActivity extends Activity {
                 if (!tvJs.isEmpty() && isCineJoyUrl(url)) {
                     view.evaluateJavascript(tvJs, null);
                 }
+                if (!enforcerJs.isEmpty() && isCineJoyUrl(url)) {
+                    view.evaluateJavascript(enforcerJs, null);
+                }
             }
 
             @Override
             public void doUpdateVisitedHistory(WebView view, String url, boolean isReload) {
                 super.doUpdateVisitedHistory(view, url, isReload);
+                // Also called for the site's in-page navigation (history.pushState).
+                boolean watching = isWatchUrl(url);
+                // Playback gate: a /watch/ page reached without an active
+                // subscription is sent to the paywall. The enforcer script
+                // normally catches this first; this backs it up for full page
+                // loads and anything it misses.
+                if (watching && !subscription.isActive()) {
+                    openPaywall();
+                    return;
+                }
                 // On a TV, keep the screen on while on a video page, so the
-                // screensaver doesn't start mid-film. Also called for the
-                // site's in-page navigation (history.pushState).
+                // screensaver doesn't start mid-film.
                 if (isTv) {
-                    boolean watching = isCineJoyUrl(url) && Uri.parse(url).getPath() != null
-                            && Uri.parse(url).getPath().startsWith("/watch/");
                     if (watching) {
                         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
                     } else {
@@ -308,6 +337,11 @@ public class MainActivity extends Activity {
                         // it guards against running twice.
                         if (!tvJs.isEmpty()) {
                             view.evaluateJavascript(tvJs, null);
+                        }
+                        // Playback gate again in case commit-visible was
+                        // skipped; it guards against running twice.
+                        if (!enforcerJs.isEmpty()) {
+                            view.evaluateJavascript(enforcerJs, null);
                         }
                     }
                 } catch (Exception ignored) {
@@ -643,6 +677,33 @@ public class MainActivity extends Activity {
     private static boolean isCineJoyUrl(String url) {
         String host = url == null ? null : Uri.parse(url).getHost();
         return host != null && (host.equals("cinejoy.pk") || host.endsWith(".cinejoy.pk"));
+    }
+
+    /** A cinejoy.pk player page (where playback happens). */
+    private static boolean isWatchUrl(String url) {
+        if (!isCineJoyUrl(url)) {
+            return false;
+        }
+        String path = Uri.parse(url).getPath();
+        return path != null && path.startsWith("/watch/");
+    }
+
+    /** Send the WebView back to the account gate, which shows the paywall. */
+    private void openPaywall() {
+        runOnUiThread(() -> {
+            if (webView != null) {
+                webView.loadUrl(ACCOUNT_PAGE);
+            }
+        });
+    }
+
+    /** The backend URL from assets/mkflix-config.json (apiBase), or "". */
+    private String readApiBaseConfig() {
+        try {
+            return new JSONObject(readAsset("mkflix-config.json")).optString("apiBase", "").trim();
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     /** Read a text file shipped in assets, or "" if it can't be read. */
@@ -1147,6 +1208,150 @@ public class MainActivity extends Activity {
             canvas.drawCircle(x, y, 18 * density, glow);
             canvas.drawCircle(x, y, 12 * density, ring);
             canvas.drawCircle(x, y, 3 * density, dot);
+        }
+    }
+
+    // --- Subscription --------------------------------------------------------
+
+    /**
+     * The MK-Flix subscription as the app sees it. The gate hands the app the
+     * session (saveSession) and the app checks the backend itself
+     * (/me/subscription), so a cinejoy.pk page can't grant itself a
+     * subscription. The answer is cached and persisted, read synchronously by
+     * the enforcer, and refreshed in the background.
+     */
+    private final class Subscription {
+        private static final String PREFS = "mkflix";
+        // Re-check in the background if the cached answer is older than this.
+        private static final long STALE_MS = 10 * 60 * 1000;
+
+        private volatile boolean active;
+        private volatile long checkedAt;
+        private String apiBase = "";
+        private String access = "";
+        private String refresh = "";
+
+        void load() {
+            SharedPreferences p = getSharedPreferences(PREFS, MODE_PRIVATE);
+            apiBase = p.getString("apiBase", "");
+            access = p.getString("access", "");
+            refresh = p.getString("refresh", "");
+            active = p.getBoolean("active", false);
+        }
+
+        private void persist() {
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                    .putString("apiBase", apiBase)
+                    .putString("access", access)
+                    .putString("refresh", refresh)
+                    .putBoolean("active", active)
+                    .apply();
+        }
+
+        void setSession(String apiBase, String access, String refresh) {
+            this.apiBase = apiBase == null ? "" : apiBase;
+            this.access = access == null ? "" : access;
+            this.refresh = refresh == null ? "" : refresh;
+            persist();
+            refreshAsync();
+        }
+
+        void clear() {
+            apiBase = "";
+            access = "";
+            refresh = "";
+            active = false;
+            checkedAt = 0;
+            persist();
+        }
+
+        boolean isActive() {
+            if (!apiBase.isEmpty() && !access.isEmpty()
+                    && System.currentTimeMillis() - checkedAt > STALE_MS) {
+                refreshAsync(); // non-blocking; the cached value is returned now
+            }
+            return active;
+        }
+
+        void refreshAsync() {
+            final String base = apiBase;
+            final String token = access;
+            if (base.isEmpty() || token.isEmpty()) {
+                return;
+            }
+            new Thread(() -> {
+                Boolean result = fetchActive(base, token);
+                if (result != null) {
+                    active = result;
+                    checkedAt = System.currentTimeMillis();
+                    persist();
+                }
+            }).start();
+        }
+
+        /** GET {base}/me/subscription; the `active` flag, or null on any error. */
+        private Boolean fetchActive(String base, String token) {
+            HttpURLConnection conn = null;
+            try {
+                conn = (HttpURLConnection) new URL(base + "/me/subscription").openConnection();
+                conn.setRequestProperty("Authorization", "Bearer " + token);
+                conn.setConnectTimeout(15000);
+                conn.setReadTimeout(15000);
+                if (conn.getResponseCode() != 200) {
+                    // 401/5xx/offline: don't turn a previously-good answer to
+                    // false on a transient blip or an expired access token; the
+                    // gate re-checks and re-sends the session each time it runs.
+                    return null;
+                }
+                ByteArrayOutputStream out = new ByteArrayOutputStream();
+                try (InputStream is = conn.getInputStream()) {
+                    byte[] buf = new byte[4096];
+                    int n;
+                    while ((n = is.read(buf)) > 0) {
+                        out.write(buf, 0, n);
+                    }
+                }
+                return new JSONObject(out.toString("UTF-8")).optBoolean("active", false);
+            } catch (Exception e) {
+                return null;
+            } finally {
+                if (conn != null) {
+                    conn.disconnect();
+                }
+            }
+        }
+    }
+
+    /** JavaScript bridge (window.MKFlixNative), used by the gate and enforcer. */
+    private final class MkFlixBridge {
+        @JavascriptInterface
+        public String getApiBase() {
+            return apiBaseConfig;
+        }
+
+        @JavascriptInterface
+        public void saveSession(String apiBase, String access, String refresh) {
+            subscription.setSession(apiBase, access, refresh);
+        }
+
+        @JavascriptInterface
+        public void clearSession() {
+            subscription.clear();
+        }
+
+        @JavascriptInterface
+        public void refreshSubscription() {
+            subscription.refreshAsync();
+        }
+
+        @JavascriptInterface
+        public boolean isSubscribed() {
+            return subscription.isActive();
+        }
+
+        @JavascriptInterface
+        public void openPaywall() {
+            MainActivity.this.openPaywall();
         }
     }
 

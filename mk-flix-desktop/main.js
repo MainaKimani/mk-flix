@@ -73,7 +73,17 @@ function popupPolicy({ url, disposition }) {
 function guardNavigation(event) {
   const { url } = event;
   const host = hostOf(url);
-  if (host && isCineJoy(host)) return;
+  if (host && isCineJoy(host)) {
+    // Playback gate: a /watch/ page reached without an active subscription is
+    // sent to the paywall. The enforcer catches in-page (SPA) navigation; this
+    // backs it up for full page loads and redirects.
+    if (!subscribed && isWatchUrl(url)) {
+      event.preventDefault();
+      const win = BrowserWindow.fromWebContents(event.sender) || BrowserWindow.getAllWindows()[0];
+      if (win) win.loadFile(path.join(__dirname, 'mkflix-account.html'));
+    }
+    return;
+  }
   event.preventDefault();
   if (host && !isAdHost(url) && isTrustedExternal(url, host)) shell.openExternal(url);
 }
@@ -92,9 +102,93 @@ function readOptional(file) {
 }
 const logoCss = readOptional('mkflix-logo.css');
 const footerJs = readOptional('mkflix-footer.js');
+// Injected into cinejoy.pk pages: blocks /watch/ playback without a subscription.
+const enforcerJs = readOptional('mkflix-enforcer.js');
 ipcMain.on('mkflix:logo-css', (event) => {
   event.returnValue = logoCss;
 });
+
+// Backend URL the account gate should use. The operator sets it without editing
+// the gate: the MKFLIX_API_BASE env var, or the `apiBase` field of
+// mkflix-config.json next to this file. The gate reads it via MKFlixNative.getApiBase().
+function configuredApiBase() {
+  if (process.env.MKFLIX_API_BASE) return process.env.MKFLIX_API_BASE.trim();
+  try {
+    return String(JSON.parse(readOptional('mkflix-config.json') || '{}').apiBase || '').trim();
+  } catch (e) {
+    return '';
+  }
+}
+const API_BASE = configuredApiBase();
+ipcMain.on('mkflix:api-base', (event) => {
+  event.returnValue = API_BASE;
+});
+
+// ---- Subscription (playback gate) ----
+// The account gate hands us the session; we check the MK-Flix backend ourselves,
+// so a page on cinejoy.pk can't fake a subscription. The enforcer injected into
+// cinejoy pages reads `subscribed` synchronously and blocks /watch/ when false.
+const http = require('http');
+const https = require('https');
+let mkSession = { apiBase: '', access: '', refresh: '' };
+let subscribed = false;
+
+function getJson(url, token) {
+  return new Promise((resolve) => {
+    let lib;
+    try {
+      lib = new URL(url).protocol === 'http:' ? http : https;
+    } catch (e) {
+      return resolve(null);
+    }
+    const req = lib.get(url, { headers: { Authorization: `Bearer ${token}` }, timeout: 15000 }, (res) => {
+      let body = '';
+      res.on('data', (d) => (body += d));
+      res.on('end', () => {
+        if (res.statusCode !== 200) return resolve(null);
+        try { resolve(JSON.parse(body)); } catch (e) { resolve(null); }
+      });
+    });
+    req.on('error', () => resolve(null));
+    req.on('timeout', () => { req.destroy(); resolve(null); });
+  });
+}
+
+async function refreshSubscription() {
+  if (!mkSession.apiBase || !mkSession.access) { subscribed = false; return; }
+  const data = await getJson(`${mkSession.apiBase}/me/subscription`, mkSession.access);
+  // On a transient failure (offline, expired access token) keep the last known
+  // answer rather than locking out a real subscriber; the gate re-sends the
+  // session and re-checks each time it runs.
+  if (data && typeof data.active === 'boolean') subscribed = data.active;
+}
+
+ipcMain.on('mkflix:save-session', (_event, s) => {
+  mkSession = {
+    apiBase: (s && s.apiBase) || '',
+    access: (s && s.access) || '',
+    refresh: (s && s.refresh) || '',
+  };
+  refreshSubscription();
+});
+ipcMain.on('mkflix:clear-session', () => {
+  mkSession = { apiBase: '', access: '', refresh: '' };
+  subscribed = false;
+});
+ipcMain.on('mkflix:refresh-subscription', () => { refreshSubscription(); });
+ipcMain.on('mkflix:is-subscribed', (event) => { event.returnValue = subscribed; });
+ipcMain.on('mkflix:open-paywall', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win) win.loadFile(path.join(__dirname, 'mkflix-account.html'));
+});
+
+function isWatchUrl(url) {
+  try {
+    return isCineJoy(hostOf(url)) && new URL(url).pathname.startsWith('/watch/');
+  } catch (e) {
+    return false;
+  }
+}
 
 // Apply the popup and navigation rules to every window, including popup
 // windows cinejoy.pk itself opens. Setting them on the main window alone
@@ -102,7 +196,10 @@ ipcMain.on('mkflix:logo-css', (event) => {
 app.on('web-contents-created', (_event, contents) => {
   contents.on('dom-ready', () => {
     const host = hostOf(contents.getURL());
-    if (host && isCineJoy(host) && footerJs) contents.executeJavaScript(footerJs).catch(() => {});
+    if (host && isCineJoy(host)) {
+      if (footerJs) contents.executeJavaScript(footerJs).catch(() => {});
+      if (enforcerJs) contents.executeJavaScript(enforcerJs).catch(() => {});
+    }
   });
   // A page that fails to load would leave a blank black window, so show
   // error.html instead, with the reason and a Retry button. ERR_ABORTED (-3)

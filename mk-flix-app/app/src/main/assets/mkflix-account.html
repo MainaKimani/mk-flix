@@ -111,6 +111,7 @@
       <input id="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="07XX XXX XXX">
       <div class="err" id="pay-err"></div>
       <button id="pay-btn" disabled>Pay</button>
+      <button id="browse-btn" class="secondary">Browse without subscribing</button>
       <a class="link" data-go="cinejoyid">Save my CineJoy number</a>
       <a class="link" id="logout-1">Sign out</a>
     </section>
@@ -158,8 +159,11 @@
   "use strict";
 
   // --- Configuration -------------------------------------------------------
-  // Point this at your deployed backend before shipping. During testing you can
-  // override it without editing this file, from the page console:
+  // The backend URL is set by the app, not here: it reads it from a config the
+  // operator controls (desktop: the MKFLIX_API_BASE env var or mkflix-config.json;
+  // Android: assets/mkflix-config.json) and hands it over as window.MKFlixNative
+  // .getApiBase(). This constant is only a last-resort fallback. During testing
+  // you can override everything from the page console:
   //   localStorage.setItem('mkflixApiBase', 'http://10.0.2.2:8000/api'); location.reload();
   // (Android emulator reaches the host machine at 10.0.2.2; desktop uses 127.0.0.1.)
   var DEFAULT_API_BASE = "https://api.mk-flix.example/api";
@@ -171,6 +175,12 @@
       if (q) return q.replace(/\/$/, "");
       var saved = localStorage.getItem("mkflixApiBase");
       if (saved) return saved.replace(/\/$/, "");
+    } catch (e) {}
+    try {
+      if (window.MKFlixNative && window.MKFlixNative.getApiBase) {
+        var fromApp = window.MKFlixNative.getApiBase();
+        if (fromApp) return String(fromApp).replace(/\/$/, "");
+      }
     } catch (e) {}
     return DEFAULT_API_BASE.replace(/\/$/, "");
   }
@@ -184,9 +194,29 @@
       if (access) localStorage.setItem("mkflix_access", access);
       if (refresh) localStorage.setItem("mkflix_refresh", refresh);
     } catch (e) {}
+    nativeSaveSession();
   }
   function clearTokens() {
     try { localStorage.removeItem("mkflix_access"); localStorage.removeItem("mkflix_refresh"); } catch (e) {}
+    nativeClear();
+  }
+
+  // --- Native bridge -------------------------------------------------------
+  // The app (window.MKFlixNative) checks the backend itself and decides whether
+  // playback is allowed on cinejoy.pk, so a page there can't fake a subscription.
+  // We hand it the session and tell it to re-check after a payment. Guarded so
+  // the gate still works in a plain browser (no bridge).
+  function nativeSaveSession() {
+    try {
+      if (window.MKFlixNative && window.MKFlixNative.saveSession)
+        window.MKFlixNative.saveSession(API, getAccess() || "", getRefresh() || "");
+    } catch (e) {}
+  }
+  function nativeClear() {
+    try { if (window.MKFlixNative && window.MKFlixNative.clearSession) window.MKFlixNative.clearSession(); } catch (e) {}
+  }
+  function nativeRefresh() {
+    try { if (window.MKFlixNative && window.MKFlixNative.refreshSubscription) window.MKFlixNative.refreshSubscription(); } catch (e) {}
   }
 
   // --- Fetch helpers -------------------------------------------------------
@@ -373,7 +403,7 @@
     authed("/payments/" + id).then(function (r) {
       if (r.ok && r.data) {
         var s = r.data.status;
-        if (s === "SUCCEEDED") { checkAccess(); return; }
+        if (s === "SUCCEEDED") { nativeRefresh(); checkAccess(); return; }
         if (s === "FAILED" || s === "CANCELLED") {
           document.getElementById("poll-err").textContent = "Payment wasn't completed.";
           setTimeout(showPaywall, 2500);
@@ -433,6 +463,7 @@
   document.getElementById("auth-toggle").addEventListener("click", function () { openAuth(authMode === "register" ? "login" : "register"); });
   document.getElementById("password").addEventListener("keydown", function (e) { if (e.key === "Enter") submitAuth(); });
   document.getElementById("pay-btn").addEventListener("click", pay);
+  document.getElementById("browse-btn").addEventListener("click", gotoSite);
   document.getElementById("continue-btn").addEventListener("click", gotoSite);
   document.getElementById("retry-btn").addEventListener("click", checkAccess);
   document.getElementById("cj-save").addEventListener("click", saveCinejoy);

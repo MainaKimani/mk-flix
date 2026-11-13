@@ -32,6 +32,8 @@
       "splash.html",
       "splash-wordmark.png",
       "mkflix-account.html",
+      "mkflix-enforcer.js",
+      "mkflix-config.json",
       "package.json"
     ],
     "directories": {
