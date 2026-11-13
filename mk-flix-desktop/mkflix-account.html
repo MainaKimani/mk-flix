@@ -307,12 +307,37 @@
 
   function gotoSite() { window.location.href = CINEJOY_URL; }
 
+  // Go to the site as a subscriber. The app decides playback from its own
+  // backend check (MKFlixNative.isSubscribed), which runs in the background
+  // after nativeSaveSession(). Opening the site before that check lands left
+  // the padlocks on and Play sending a paying user back here, so wait (briefly)
+  // until the app agrees. After the timeout go anyway: the enforcer re-asks the
+  // app on every Play, so a late answer still unlocks playback.
+  var NATIVE_WAIT_MS = 5000;
+  function enterSite() {
+    var B = window.MKFlixNative;
+    if (!B || !B.isSubscribed) { gotoSite(); return; }
+    show("loading");
+    var started = Date.now();
+    (function wait() {
+      var ok = false;
+      try { ok = !!B.isSubscribed(); } catch (e) { ok = true; }
+      if (ok || Date.now() - started > NATIVE_WAIT_MS) { gotoSite(); return; }
+      setTimeout(wait, 150);
+    })();
+  }
+
   // --- Flow ----------------------------------------------------------------
   function checkAccess() {
     show("loading");
     if (!getAccess()) { show("welcome"); return; }
     authed("/me/subscription").then(function (r) {
       if (r.ok && r.data) {
+        // Hand the app the current session on every check, not only at sign-in:
+        // the app's own subscription check needs it, and after a restart (or a
+        // token refresh) it would otherwise be checking with nothing, or with a
+        // stale token, and keep treating a subscriber as unsubscribed.
+        nativeSaveSession();
         if (r.data.active || (r.data.status && r.data.status !== "NONE")) { showSubscription(r.data); }
         else { showPaywall(); }
       } else if (r.status === 401) {
@@ -354,7 +379,7 @@
     var primary = document.getElementById("sub-primary");
     var secondary = document.getElementById("sub-secondary");
     if (active) {
-      primary.textContent = "Continue to MK-Flix"; primary.onclick = gotoSite;
+      primary.textContent = "Continue to MK-Flix"; primary.onclick = enterSite;
       secondary.textContent = "Renew or change plan";
       secondary.onclick = function () { showPaywall(); paywallReturn = "subscription"; };
     } else {
