@@ -32,6 +32,7 @@ mk-flix commits:
 - `626bf14` / `f4dbb0b` startup splash (desktop + Android) and white-flash fix
 
 mk-flix-be commits:
+- `93af3b3` CORS: the gate's `Origin: null` is always allowed outside DEBUG (35 tests)
 - `cccf15c` reconciliation job, retries, 31 tests
 - `97e075c` backend scaffold (accounts, billing, payments)
 
@@ -93,12 +94,12 @@ cd mk-flix-app && sed 's#build-tools/34.0.0#build-tools/36.0.0#' build-apk.sh > 
 
 - **No release cut.** App versions still 1.4.0; no new APK/installers published. When ready: bump versions (`mk-flix-app/app/build.gradle.kts`, `mk-flix-desktop/package.json`), update READMEs, build artifacts.
 - **M-Pesa needs live Daraja credentials** in `.env` + the callback URL (with its secret token) registered with Safaricom. Until then STK "Pay" fails; use the shell grant above to test the subscribed path. The `MANUAL` payment provider settles locally for tests.
-- **Production backend:** deploy over HTTPS, Postgres, scheduled `reconcile_payments` (cron/systemd), and a CORS/origin policy that lets the apps' `fetch()` through (they call from a `file://`/`null` origin).
+- **Production backend:** deploy over HTTPS, Postgres, scheduled `reconcile_payments` (cron/systemd). CORS is handled: outside DEBUG, `null` (the desktop gate loaded from `file://`) is always allowed alongside any `CORS_ALLOWED_ORIGINS`, with credentials off — safe because auth is bearer tokens, not cookies. Android's WebView bypasses CORS for the gate via `setAllowUniversalAccessFromFileURLs`.
 - **Confirm `mk-flix-be` repo is private** (it's a billing backend; no secrets committed, but still).
 
 ## Caveats worth re-reading
 
-- The injected menu/lock scripts depend on **cinejoy.pk's real logged-in DOM**, which was never directly inspected this session (the Chrome extension wasn't connected; the settings submenu/bottom bar need the user's CineJoy login). They were verified against synthetic markup and are written defensively (do nothing if they can't find the target). **Validate on the real logged-in site**; likely tuning points: the settings-submenu detection (assumes one list holds Watch History/Shorts), the bottom-bar detection (assumes `position: fixed` at viewport bottom), and poster detection (assumes `<img>`, not CSS `background-image`).
+- The injected menu/lock scripts depend on **cinejoy.pk's real logged-in DOM**. They have since been **tested on the real logged-in site and work** (menu entry and padlocks). They stay written defensively (do nothing if they can't find the target), so if cinejoy changes its markup they go quiet rather than break the page; the likely tuning points then are: the settings-submenu detection (assumes one list holds Watch History/Shorts), the bottom-bar detection (assumes `position: fixed` at viewport bottom), and poster detection (assumes `<img>`, not CSS `background-image`).
 - Repeated layout breakage earlier came from matching too broadly; `mkflix-menu.js` is now deliberately narrow (settings submenu + bottom bar only).
 
 ## Where the raw session lives
