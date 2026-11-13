@@ -1,10 +1,10 @@
 {
   "name": "mk-flix-desktop",
-  "productName": "MK-Flix",
+  "productName": "Blendy Play",
   "version": "1.4.0",
-  "description": "MK-Flix desktop app for Windows and Linux, powered by CineJoy: watch cinejoy.pk on the big screen",
+  "description": "Blendy Play desktop app for Windows and Linux, powered by CineJoy: watch cinejoy.pk on the big screen",
   "author": {
-    "name": "MK-Flix",
+    "name": "Blendy Studio",
     "email": "alexroymauk@gmail.com"
   },
   "homepage": "https://github.com/MainaKimani/mk-flix",
@@ -15,7 +15,7 @@
   },
   "scripts": {
     "start": "electron .",
-    "package-win": "electron-packager . MK-Flix --platform=win32 --arch=x64 --icon=icon.ico --ignore='^/(how-to-install\\.txt|build-win\\.sh|README\\.md|\\.nvmrc|node_modules)($|/)' --win32metadata.CompanyName=MK-Flix --app-copyright='Copyright (C) 2026 MK-Flix' --overwrite --out=dist",
+    "package-win": "electron-packager . 'Blendy Play' --platform=win32 --arch=x64 --icon=icon.ico --ignore='^/(how-to-install\\.txt|build-win\\.sh|README\\.md|\\.nvmrc|node_modules)($|/)' --win32metadata.CompanyName='Blendy Studio' --app-copyright='Copyright (C) 2026 Blendy Studio' --overwrite --out=dist",
     "dist-win": "./build-win.sh",
     "dist-linux": "electron-builder --linux deb"
   },
@@ -48,15 +48,15 @@
       "executableName": "mk-flix",
       "icon": "icon.png",
       "category": "AudioVideo",
-      "synopsis": "MK-Flix: Powered by CineJoy",
+      "synopsis": "Blendy Play: Powered by CineJoy",
       "desktop": {
         "entry": {
-          "Name": "MK-Flix",
+          "Name": "Blendy Play",
           "GenericName": "Video streaming",
           "Comment": "Watch cinejoy.pk, ad-free, in its own window"
         }
       },
-      "artifactName": "${productName}_${version}_${arch}.${ext}",
+      "artifactName": "Blendy-Play_${version}_${arch}.${ext}",
       "syncDesktopName": true
     },
     "deb": {

@@ -78,19 +78,20 @@ Node built into Electron.
 ```sh
 npm install
 npm start               # run locally
-npm run dist-win        # build dist/MK-Flix-Windows-x64.zip
-npm run dist-linux      # build dist/MK-Flix_<version>_amd64.deb
+npm run dist-win        # build dist/Blendy-Play-Windows-x64.zip
+npm run dist-linux      # build dist/Blendy-Play_<version>_amd64.deb
 ```
 
 `dist-win` runs `build-win.sh`, which packages the app (`npm run
-package-win`, output in `dist/MK-Flix-win32-x64/`) and zips it as an
-`MK-Flix` folder holding `MK-Flix.exe` and `how-to-install.txt`, the
-install guide for end users.
+package-win`, output in `dist/Blendy Play-win32-x64/`) and zips it as a
+`Blendy Play` folder holding `Blendy Play.exe` and `how-to-install.txt`,
+the install guide for end users.
 
 `dist-linux` uses electron-builder to make a `.deb` for Ubuntu/Debian.
-It installs to `/opt/MK-Flix` with an apps-menu entry and icon; install
-it with `sudo apt install ./MK-Flix_1.4.0_amd64.deb` and remove it with
-`sudo apt remove mk-flix`. Its install script also loads an AppArmor
+It installs to `/opt/Blendy Play` with an apps-menu entry and icon;
+install it with `sudo apt install ./Blendy-Play_<version>_amd64.deb` and
+remove it with `sudo apt remove mk-flix`. The package keeps the name
+`mk-flix`, so it upgrades an install made before the rename. Its install script also loads an AppArmor
 profile on Ubuntu 24.04, so the installed app needs no chrome-sandbox
 fix (that's only needed for `npm start` from source).
 
@@ -103,6 +104,9 @@ Notes:
   `node_modules`. It does need `preload.js`, `mkflix-logo.css`, `mkflix-footer.js`,
   `adblock-hosts.txt`, `error.html`, `splash.html`, `splash-wordmark.png` and
   `icon.png` next to it.
+- The app is named Blendy Play but keeps its data (sign-in, cookies,
+  settings) in the `MK-Flix` folder it used before the rename: `main.js`
+  pins Electron's `userData` path so the rename doesn't sign users out.
 - On Ubuntu 24.04 and other distros that restrict unprivileged user
   namespaces, `npm start` aborts with a SUID sandbox error. Fix it after
   each install that downloads a new Electron:
@@ -114,6 +118,6 @@ Notes:
 
 ## Releases
 
-Each release on GitHub carries `MK-Flix-Windows-x64.zip` and
-`MK-Flix_<version>_amd64.deb` built with the commands above, alongside the
+Each release on GitHub carries `Blendy-Play-Windows-x64.zip` and
+`Blendy-Play_<version>_amd64.deb` built with the commands above, alongside the
 Android APK: <https://github.com/MainaKimani/mk-flix/releases>.

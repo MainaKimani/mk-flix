@@ -1,30 +1,30 @@
-MK-Flix: Powered by CineJoy
+Blendy Play: Powered by CineJoy
 How to install on Windows
 ===========================
 
 You need: Windows 10 or Windows 11 (64-bit) and an internet connection.
-MK-Flix doesn't need installing. You unzip it and run it.
+Blendy Play doesn't need installing. You unzip it and run it.
 
 
 1. UNZIP IT
 -----------
-- Right-click MK-Flix-Windows-x64.zip and choose "Extract All...".
+- Right-click Blendy-Play-Windows-x64.zip and choose "Extract All...".
 - Pick a place to keep it, for example your Documents folder or
   C:\Users\<your name>\Apps, and click "Extract".
 
-  Don't run MK-Flix from inside the zip without extracting it first.
+  Don't run Blendy Play from inside the zip without extracting it first.
   It won't work properly that way.
 
 
 2. START IT
 -----------
-- Open the "MK-Flix" folder you just extracted.
-- Double-click MK-Flix.exe.
+- Open the "Blendy Play" folder you just extracted.
+- Double-click "Blendy Play.exe".
 
 
 3. IF WINDOWS SAYS "Windows protected your PC"
 ----------------------------------------------
-This appears the first time because MK-Flix is a new app that hasn't
+This appears the first time because Blendy Play is a new app that hasn't
 been code-signed. To continue:
 - Click "More info".
 - Click "Run anyway".
@@ -34,23 +34,26 @@ You only need to do this once.
 
 4. MAKE A SHORTCUT (optional)
 -----------------------------
-- Desktop: right-click MK-Flix.exe, choose "Show more options"
+- Desktop: right-click "Blendy Play.exe", choose "Show more options"
   (Windows 11), then "Send to" > "Desktop (create shortcut)".
-- Taskbar: start MK-Flix, then right-click its icon on the taskbar
+- Taskbar: start Blendy Play, then right-click its icon on the taskbar
   and choose "Pin to taskbar".
 
 
 UPDATING TO A NEW VERSION
 -------------------------
-Close MK-Flix, delete the old "MK-Flix" folder, and extract the new zip
-in the same place. Your sign-in and settings are kept.
+Close Blendy Play, delete the old "Blendy Play" folder, and extract the
+new zip in the same place. Your sign-in and settings are kept.
+(Versions before the rename used a folder called "MK-Flix": delete that
+one instead, and any shortcuts to MK-Flix.exe.)
 
 
 UNINSTALLING
 ------------
-- Delete the "MK-Flix" folder, and any shortcuts you made.
+- Delete the "Blendy Play" folder, and any shortcuts you made.
 - To also remove your sign-in and settings, press Windows key + R,
   type %APPDATA%\MK-Flix and press Enter, then delete that folder.
+  (It keeps the app's former name, MK-Flix.)
 
 
 GOOD TO KNOW
@@ -59,7 +62,7 @@ GOOD TO KNOW
   Press Esc to leave fullscreen.
 - Press Alt to show the menu bar.
 - Ads and pop-ups are blocked automatically.
-- MK-Flix doesn't host any films or shows. It's a window onto cinejoy.pk.
+- Blendy Play doesn't host any films or shows. It's a window onto cinejoy.pk.
 
 
 Enjoy! NutFlix just got better ;)

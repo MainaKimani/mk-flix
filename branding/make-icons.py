@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate every MK-Flix app icon from branding/mkflix-icon-1024.png.
+"""Generate every Blendy Play app icon from branding/mkflix-icon-1024.png.
 
 Run from anywhere:  python3 branding/make-icons.py   (needs Pillow)
 
@@ -15,8 +15,8 @@ Writes:
   mk-flix-app/.../assets/icon.png                      icon on the Android error screen
   mk-flix-app/.../drawable-{xhdpi,xxxhdpi}/tv_banner.png  Android TV home-screen banner
   mk-flix-app/.../drawable-{xhdpi,xxxhdpi}/splash_logo.png      startup screen mark
-  mk-flix-app/.../drawable-{xhdpi,xxxhdpi}/splash_wordmark.png  startup screen "MK-Flix"
-  mk-flix-desktop/splash-wordmark.png                  desktop startup screen "MK-Flix"
+  mk-flix-app/.../drawable-{xhdpi,xxxhdpi}/splash_wordmark.png  startup screen wordmark
+  mk-flix-desktop/splash-wordmark.png                  desktop startup screen wordmark
 
 The master is a glowing mark on a transparent background, designed for dark
 surroundings. The desktop icons keep it transparent. Android legacy icons
@@ -34,6 +34,8 @@ MASTER = ROOT / "branding" / "mkflix-icon-1024.png"
 # Wordmark font for the TV banner (Ubuntu Bold, Ubuntu Font Licence 1.0; see
 # fonts/Ubuntu-font-LICENCE.txt).
 FONT = ROOT / "branding" / "fonts" / "Ubuntu-B.ttf"
+# The product name drawn in the wordmarks (TV banner and startup screens).
+NAME = "Blendy Play"
 DESKTOP = ROOT / "mk-flix-desktop"
 RES = ROOT / "mk-flix-app" / "app" / "src" / "main" / "res"
 ANDROID_ASSETS = ROOT / "mk-flix-app" / "app" / "src" / "main" / "assets"
@@ -165,7 +167,7 @@ def main():
         RES / "drawable" / "ic_launcher_monochrome.png", optimize=True)
 
     # Android TV / Google TV home-screen banner (320x180 dp): the mark plus an
-    # "MK-Flix" wordmark. 1080p TVs use xhdpi (320x180 px), 4K TVs xxxhdpi.
+    # wordmark. 1080p TVs use xhdpi (320x180 px), 4K TVs xxxhdpi.
     for folder, scale in (("drawable-xhdpi", 1), ("drawable-xxxhdpi", 2)):
         (RES / folder).mkdir(exist_ok=True)
         tv_banner(mark, 320 * scale, 180 * scale).save(RES / folder / "tv_banner.png", optimize=True)
@@ -188,13 +190,13 @@ def main():
 
 
 def wordmark(mark, size):
-    """ "MK-Flix" in the banner's gradient, on transparent, cropped to the text. """
+    """The product name in the banner's gradient, on transparent, cropped to the text. """
     font = ImageFont.truetype(str(FONT), size)
-    left, top, right, bottom = font.getbbox("MK-Flix")
+    left, top, right, bottom = font.getbbox(NAME)
     pad = round(size * 0.1)
     w, h = right - left + 2 * pad, bottom - top + 2 * pad
     mask = Image.new("L", (w, h), 0)
-    ImageDraw.Draw(mask).text((pad - left, pad - top), "MK-Flix", font=font, fill=255)
+    ImageDraw.Draw(mask).text((pad - left, pad - top), NAME, font=font, fill=255)
     gradient = Image.new("RGBA", (w, h))
     gd = ImageDraw.Draw(gradient)
     stops = sample_neon(mark)
@@ -206,7 +208,7 @@ def wordmark(mark, size):
 
 
 def tv_banner(mark, w, h):
-    """Mark on the left, "MK-Flix" on the right, on a dark backdrop.
+    """Mark on the left, the product name on the right, on a dark backdrop.
 
     The wordmark is filled with a left-to-right gradient sampled from the
     mark's own neon colours (cyan, magenta, red), so it reads as one logo.
@@ -222,7 +224,7 @@ def tv_banner(mark, w, h):
     left = round(w * 0.07)
     banner.alpha_composite(art, (left, (h - mark_h) // 2))
 
-    text = "MK-Flix"
+    text = NAME
     text_left = left + art.width + round(w * 0.04)
     max_w = w - text_left - round(w * 0.06)
     size = round(h * 0.34)

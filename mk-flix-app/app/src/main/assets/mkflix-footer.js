@@ -48,7 +48,7 @@
   function buildFooter() {
     var box = document.createElement('div');
     box.id = 'mkflix-footer';
-    box.appendChild(el('mkf-name', 'MK-Flix: Powered by CineJoy'));
+    box.appendChild(el('mkf-name', 'Blendy Play: Powered by CineJoy'));
     box.appendChild(el('mkf-tag', 'NutFlix just got better 😉'));
     box.appendChild(el('mkf-support', 'Support or buy me coffee'));
     var pay = el('mkf-pay');

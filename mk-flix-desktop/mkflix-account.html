@@ -15,7 +15,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <meta http-equiv="Content-Security-Policy"
       content="default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src *">
-<title>MK-Flix</title>
+<title>Blendy Play</title>
 <style>
   :root {
     --bg: #000;
@@ -90,7 +90,7 @@
   <div class="card card-rel">
     <button id="back-btn" class="back hidden" type="button" aria-label="Go back" title="Go back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg></button>
     <img class="logo" src="icon.png" alt="">
-    <div class="brand">MK-Flix</div>
+    <div class="brand">Blendy Play</div>
 
     <!-- checking -->
     <section data-view="loading">
@@ -100,14 +100,14 @@
 
     <!-- onboarding -->
     <section data-view="welcome" class="hidden">
-      <h1>Welcome to MK-Flix</h1>
+      <h1>Welcome to Blendy Play</h1>
       <p class="sub">An ad-free way to watch, on your TV, desktop and phone.</p>
       <div class="note">
-        <strong>You also need a CineJoy account.</strong> MK-Flix plays content
+        <strong>You also need a CineJoy account.</strong> Blendy Play plays content
         from cinejoy.pk, which gives you a 16-digit account number when you
         register there. Keep that number safe — it is how you sign in to CineJoy.
       </div>
-      <button data-go="register">Create a MK-Flix account</button>
+      <button data-go="register">Create a Blendy Play account</button>
       <a class="link" data-go="login">I already have one — sign in</a>
     </section>
 
@@ -173,7 +173,7 @@
 
     <!-- can't reach backend -->
     <section data-view="retry" class="hidden">
-      <h1>Can't reach MK-Flix</h1>
+      <h1>Can't reach Blendy Play</h1>
       <p class="sub">We couldn't check your subscription. Check your connection
         and try again.</p>
       <button id="retry-btn">Try again</button>
@@ -415,12 +415,12 @@
     var primary = document.getElementById("sub-primary");
     var secondary = document.getElementById("sub-secondary");
     if (active) {
-      primary.textContent = "Continue to MK-Flix"; primary.onclick = enterSite;
+      primary.textContent = "Continue to Blendy Play"; primary.onclick = enterSite;
       secondary.textContent = "Renew or change plan";
       secondary.onclick = function () { showPaywall(); paywallReturn = "subscription"; };
     } else {
       primary.textContent = "Choose a plan"; primary.onclick = showPaywall;
-      secondary.textContent = "Continue to MK-Flix"; secondary.onclick = gotoSite;
+      secondary.textContent = "Continue to Blendy Play"; secondary.onclick = gotoSite;
     }
     show("active");
   }
@@ -458,7 +458,7 @@
       } else {
         err.textContent = firstError(r.data) || "That didn't work. Please try again.";
       }
-    }).catch(function () { btn.disabled = false; err.textContent = "Can't reach MK-Flix. Check your connection."; });
+    }).catch(function () { btn.disabled = false; err.textContent = "Can't reach Blendy Play. Check your connection."; });
   }
 
   function firstError(data) {
@@ -498,7 +498,7 @@
         b.addEventListener("click", function () { selectPlan(plan, b); });
         list.appendChild(b);
       });
-    }).catch(function () { list.innerHTML = ""; document.getElementById("pay-err").textContent = "Can't reach MK-Flix."; });
+    }).catch(function () { list.innerHTML = ""; document.getElementById("pay-err").textContent = "Can't reach Blendy Play."; });
     show("plans");
   }
 
@@ -526,7 +526,7 @@
       } else {
         err.textContent = firstError(r.data) || "Couldn't start the payment.";
       }
-    }).catch(function () { btn.disabled = false; err.textContent = "Can't reach MK-Flix."; });
+    }).catch(function () { btn.disabled = false; err.textContent = "Can't reach Blendy Play."; });
   }
 
   // Poll the payment until the callback settles it (or we give up).
@@ -574,7 +574,7 @@
       btn.disabled = false;
       if (r.ok) { backFromCinejoy(); }
       else { err.textContent = firstError(r.data) || "Couldn't save that."; }
-    }).catch(function () { btn.disabled = false; err.textContent = "Can't reach MK-Flix."; });
+    }).catch(function () { btn.disabled = false; err.textContent = "Can't reach Blendy Play."; });
   }
 
   function backFromCinejoy() {
