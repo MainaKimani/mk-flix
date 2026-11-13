@@ -26,6 +26,8 @@
     --cyan: #00e5ff;
     --magenta: #e040fb;
     --red: #ff3d57;
+    /* Dark native controls: the checkbox and the terms scrollbar. */
+    color-scheme: dark;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
@@ -82,6 +84,20 @@
     background: transparent; border: 1px solid var(--line); color: var(--text); cursor: pointer; }
   .back:hover { border-color: var(--magenta); }
   .back svg { width: 20px; height: 20px; display: block; }
+  .agree { display: flex; align-items: flex-start; gap: 10px; margin: 16px 0 0;
+    font-size: 13px; line-height: 1.5; color: var(--muted); cursor: pointer; }
+  .agree input { flex: none; width: 18px; height: 18px; margin: 1px 0 0; padding: 0;
+    accent-color: var(--magenta); cursor: pointer; }
+  .agree a, .terms a { color: var(--cyan); }
+  .terms { max-height: 58vh; overflow-y: auto; padding: 4px 14px 4px 2px; margin: 0 0 4px;
+    font-size: 13px; line-height: 1.6; color: #d6d6de; border-bottom: 1px solid var(--line); }
+  .terms h3 { font-size: 14px; color: var(--text); margin: 18px 0 6px; }
+  .terms p { margin: 0 0 10px; }
+  .terms ul { margin: 0 0 10px; padding-left: 20px; }
+  .terms table { border-collapse: collapse; margin: 0 0 10px; }
+  .terms th, .terms td { border: 1px solid var(--line); padding: 5px 10px; text-align: left; }
+  .terms strong { color: var(--text); }
+  .terms:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
   .hidden { display: none; }
   @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
 </style>
@@ -132,6 +148,13 @@
       <div id="plan-list"></div>
       <label for="phone" style="margin-top:18px">M-Pesa phone number</label>
       <input id="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="07XX XXX XXX">
+      <label class="agree" for="terms-ok">
+        <input id="terms-ok" type="checkbox">
+        <span>I have read and agree to the
+          <a href="#" id="terms-link">Terms and Conditions</a>. I understand that
+          Blendy Play does not host any content, and that availability of titles
+          depends on a third-party platform.</span>
+      </label>
       <div class="err" id="pay-err"></div>
       <button id="pay-btn" disabled>Pay</button>
       <button id="browse-btn" class="secondary">Browse without subscribing</button>
@@ -168,7 +191,66 @@
       <button id="sub-primary"></button>
       <button id="sub-secondary" class="secondary"></button>
       <a class="link" data-go="cinejoyid">Save my CineJoy number</a>
+      <a class="link" data-go="terms">Terms and Conditions</a>
       <a class="link" id="logout-2">Sign out</a>
+    </section>
+
+    <!-- terms and conditions. The text is copied from
+         docs/terms-and-conditions-draft.md (without its draft banner and the
+         notes after the rule). Change both together, and bump TERMS_VERSION
+         below whenever the wording changes. -->
+    <section data-view="terms" class="hidden">
+      <h1>Terms and Conditions</h1>
+      <div class="terms" id="terms-text" tabindex="0" role="document" aria-label="Terms and Conditions">
+        <p><strong>Last updated:</strong> November 13, 2026</p>
+        <h3>1. About these terms</h3>
+        <p>These Terms and Conditions ("Terms") govern your use of the Blendy Play app for Android and desktop, and of the Blendy Play account and subscription service behind it (together, "Blendy Play" or "the Service"). The Service is operated by Blendy Studio ("we", "us", "our").</p>
+        <p>You must accept these Terms before you make a payment. When you tick the box on the payment screen, you confirm that you have read these Terms, that you agree to them, and that you are at least 18 years old or have the consent of a parent or guardian. If you do not agree, do not subscribe or use the Service.</p>
+        <h3>2. What Blendy Play is</h3>
+        <p>Blendy Play is an app that lets you browse and watch content from a <strong>third-party platform</strong> (CineJoy) without advertisements, on the devices Blendy Play supports.</p>
+        <p><strong>We do not own, store, host, upload or distribute any films, series or other media files.</strong> All media is hosted and served by the third-party platform. Blendy Play only provides the app you use to reach that platform, an ad-free viewing experience, and the account and subscription service described in these Terms.</p>
+        <h3>3. Third-party content and availability</h3>
+        <p>3.1 <strong>No affiliation.</strong> Blendy Play is independent. It is not owned by, endorsed by or affiliated with the third-party platform or any studio, broadcaster or rights holder whose content appears on it. Their names and trademarks belong to their owners.</p>
+        <p>3.2 <strong>Your third-party account.</strong> To watch content you need your own account with the third-party platform. That platform's own terms continue to apply to your use of its content. You are responsible for complying with them and with the law that applies to you.</p>
+        <p>3.3 <strong>We do not control third-party content.</strong> We do not choose, review, edit or license the content on the third-party platform. We are not responsible for its accuracy, quality, legality, age-suitability, or for whether it is offered.</p>
+        <p>3.4 <strong>Availability.</strong> The third-party platform's servers may sometimes be unavailable, slow or changed, and individual titles or files may be removed or missing from them, <strong>even while Blendy Play itself is running normally.</strong> These are outside our control. When this happens we will make reasonable efforts to keep your experience with Blendy Play as smooth as possible, for example by showing clear messages and restoring access quickly when the platform comes back. We cannot guarantee that any particular title, or the third-party platform as a whole, will be available at any given time.</p>
+        <p>3.5 <strong>If the third-party platform stops working.</strong> If the third-party platform closes, blocks Blendy Play, or changes in a way that stops Blendy Play from working, we will notify you while we try to resolve this. However, no refunds will be made for running subscriptions.</p>
+        <h3>4. Security and your data</h3>
+        <p>4.1 <strong>A secure platform.</strong> We take reasonable technical and organisational measures to protect your account and data. These include encrypted connections between the app and our servers, hashed passwords, and encryption of your third-party account number when it is stored. No online service can be completely secure, however, and we cannot guarantee that unauthorised access will never occur.</p>
+        <p>4.2 <strong>What we collect.</strong> To run the Service we keep:</p>
+        <ul><li>your email address, and your name and phone number if you provide them;</li><li>your password, stored only in hashed form;</li><li>your third-party platform account number, stored encrypted;</li><li>records of your M-Pesa payments (phone number, amount, date, M-Pesa receipt number and status) and of your subscription.</li></ul>
+        <p>We do not see, record or store what you watch.</p>
+        <p>4.3 <strong>How we use it.</strong> We use this data only to provide the Service: to log you in, connect you to the third-party platform, process payments, manage your subscription, prevent fraud, and contact you about your account. We do not sell your data. We share it only with service providers we need to run the Service (such as Safaricom, for M-Pesa payments, and our hosting provider) or where the law requires it.</p>
+        <p>4.4 <strong>Your rights.</strong> Under Kenya's Data Protection Act, 2019, you may ask to access, correct or delete your personal data by contacting us at blendyplay@mainakimani.com.</p>
+        <h3>5. Your account</h3>
+        <p>5.1 Give accurate details when you register, and keep your password confidential. You are responsible for activity on your account.</p>
+        <p>5.2 A subscription is for your personal, non-commercial use. Do not share, sell or transfer your account.</p>
+        <p>5.3 Tell us promptly at blendyplay@mainakimani.com if you believe your account has been used without your permission.</p>
+        <h3>6. Subscriptions and payments</h3>
+        <p>6.1 <strong>Plans.</strong> We currently offer:</p>
+        <table><tr><th>Plan</th><th>Price</th><th>Access</th></tr><tr><td>Weekly</td><td>KES 99</td><td>7 days</td></tr><tr><td>Monthly</td><td>KES 299</td><td>30 days</td></tr></table>
+        <p>Prices include any applicable taxes. We may change prices for future payments, and will show the current price before you pay.</p>
+        <p>6.2 <strong>What you pay for.</strong> Your subscription pays for the Blendy Play app experience: ad-free browsing and playback through the Blendy Play app, and the features of the app. It does not pay for, buy or license any content. Any fees charged by the third-party platform are separate.</p>
+        <p>6.3 <strong>Paying with M-Pesa.</strong> Payments are made by M-Pesa. When you choose a plan, an M-Pesa prompt is sent to the Safaricom number you enter, and your subscription starts once Safaricom confirms the payment to us. Safaricom's own terms apply to the M-Pesa transaction itself.</p>
+        <p>6.4 <strong>No automatic renewal.</strong> Subscriptions do not renew automatically. We never charge you without a payment prompt that you approve on your phone. If you pay again while your subscription is still active, the new period is added on top of the time you have left.</p>
+        <p>6.5 <strong>Failed or cancelled payments.</strong> If you decline the M-Pesa prompt, it times out, or Safaricom reports the payment as failed, you are not charged and no subscription time is added. If money left your M-Pesa account but your subscription was not activated, contact us at blendyplay@mainakimani.com with your M-Pesa receipt number and we will resolve it.</p>
+        <p>6.6 <strong>Refunds.</strong> Payments are non-refundable once the subscription period has started, except where a fault on our side prevents you from using Blendy Play, or where the law requires a refund. Note that clause 3.4 means outages on the third-party platform alone do not entitle you to a refund.</p>
+        <h3>7. Acceptable use</h3>
+        <p>You agree not to:</p>
+        <ul><li>Use the Service for any unlawful purpose, or to infringe anyone's intellectual property;</li><li>Reverse-engineer, tamper with or bypass the app's subscription checks, or attempt to access other users' accounts or our systems;</li><li>Resell, sublicense or commercially exploit the Service.</li></ul>
+        <h3>8. Disclaimers and limitation of liability</h3>
+        <p>8.1 The Service is provided "as is" and "as available". To the extent the law allows, we make no promise that it will be uninterrupted, error-free, or compatible with every device, or that any third-party content will be available.</p>
+        <p>8.2 To the extent the law allows, we are not liable for any indirect or consequential loss, or for any loss caused by the third-party platform, its content, or its availability. Our total liability to you for any claim relating to the Service is limited to the amount you paid us in the single month before the claim arose.</p>
+        <p>8.3 Nothing in these Terms limits any right you have as a consumer that cannot be limited under Kenyan law, including under the Consumer Protection Act, 2012.</p>
+        <h3>9. Suspension, changes and general terms</h3>
+        <p>9.1 <strong>Suspension.</strong> We may suspend or close an account that breaches these Terms. If we do so without fault on your part, we will refund unused subscription time.</p>
+        <p>9.2 <strong>Changes to the Service.</strong> We may update, change or discontinue features of Blendy Play. If we discontinue the Service entirely, we will refund unused subscription time.</p>
+        <p>9.3 <strong>Changes to these Terms.</strong> We may update these Terms. We will tell you in the app before changes take effect, and may ask you to accept the new Terms before your next payment. Changes do not affect a subscription period you have already paid for.</p>
+        <p>9.4 <strong>Governing law.</strong> These Terms are governed by the laws of Kenya, and the courts of Kenya have jurisdiction over any dispute.</p>
+        <p>9.5 <strong>Contact.</strong> blendyplay@mainakimani.com</p>
+      </div>
+      <button id="terms-agree">I agree</button>
+      <a class="link" id="terms-back">Back</a>
     </section>
 
     <!-- can't reach backend -->
@@ -194,6 +276,9 @@
   // (Android emulator reaches the host machine at 10.0.2.2; desktop uses 127.0.0.1.)
   var DEFAULT_API_BASE = "https://api.mk-flix.example/api";
   var CINEJOY_URL = "https://cinejoy.pk/";
+  // Which wording of the Terms the user accepts when they tick the box; sent
+  // with each payment. Bump it whenever the terms text below changes.
+  var TERMS_VERSION = "2026-11-13";
 
   function apiBase() {
     try {
@@ -481,7 +566,8 @@
     var note = document.getElementById("pay-note");
     note.textContent = typeof notice === "string" ? notice : "";
     note.classList.toggle("hidden", typeof notice !== "string" || !notice);
-    document.getElementById("pay-btn").disabled = true;
+    document.getElementById("terms-ok").checked = false;
+    updatePayButton();
     document.getElementById("pay-err").textContent = "";
     var list = document.getElementById("plan-list");
     list.innerHTML = '<div class="spin"></div>';
@@ -507,7 +593,37 @@
     var all = document.querySelectorAll("#plan-list .plan");
     for (var i = 0; i < all.length; i++) all[i].classList.remove("sel");
     el.classList.add("sel");
-    document.getElementById("pay-btn").disabled = false;
+    updatePayButton();
+  }
+
+  // Pay needs both a plan and the ticked Terms box.
+  function updatePayButton() {
+    document.getElementById("pay-btn").disabled =
+      !selectedPlan || !document.getElementById("terms-ok").checked;
+  }
+
+  // --- Terms and Conditions ------------------------------------------------
+  // Opened from the paywall (where "I agree" ticks the box) or from the
+  // subscription page (read only). Returning to the paywall uses show(), not
+  // showPaywall(), so the chosen plan and phone number are kept.
+  var termsReturn = "plans";
+  function openTerms(from) {
+    termsReturn = from;
+    document.getElementById("terms-agree").classList.toggle("hidden", from !== "plans");
+    show("terms");
+    var text = document.getElementById("terms-text");
+    text.scrollTop = 0;
+    try { text.focus(); } catch (e) {}
+  }
+
+  function closeTerms(agreed) {
+    if (termsReturn === "plans") {
+      if (agreed) document.getElementById("terms-ok").checked = true;
+      show("plans");
+      updatePayButton();
+    } else {
+      checkAccess("subscription");
+    }
   }
 
   function pay() {
@@ -515,10 +631,11 @@
     var err = document.getElementById("pay-err");
     err.textContent = "";
     if (!selectedPlan) { err.textContent = "Choose a plan first."; return; }
+    if (!document.getElementById("terms-ok").checked) { err.textContent = "Agree to the Terms and Conditions first."; return; }
     if (!phone) { err.textContent = "Enter your M-Pesa phone number."; return; }
     var btn = document.getElementById("pay-btn");
     btn.disabled = true;
-    authed("/payments/mpesa/stk", { method: "POST", body: { plan_code: selectedPlan.code, phone_number: phone } }).then(function (r) {
+    authed("/payments/mpesa/stk", { method: "POST", body: { plan_code: selectedPlan.code, phone_number: phone, terms_version: TERMS_VERSION } }).then(function (r) {
       btn.disabled = false;
       if (r.ok && r.data && r.data.payment) {
         show("paying");
@@ -593,6 +710,7 @@
     if (!go) return;
     e.preventDefault();
     if (go === "register" || go === "login") openAuth(go);
+    else if (go === "terms") openTerms("active");
     else if (go === "cinejoyid") openCinejoy(document.querySelector('[data-view="active"]').classList.contains("hidden") ? "plans" : "active");
   });
   document.getElementById("auth-submit").addEventListener("click", submitAuth);
@@ -606,6 +724,10 @@
   document.getElementById("cj-save").addEventListener("click", saveCinejoy);
   document.getElementById("cj-back").addEventListener("click", backFromCinejoy);
   document.getElementById("logout-1").addEventListener("click", logout);
+  document.getElementById("terms-ok").addEventListener("change", updatePayButton);
+  document.getElementById("terms-link").addEventListener("click", function (e) { e.preventDefault(); openTerms("plans"); });
+  document.getElementById("terms-agree").addEventListener("click", function () { closeTerms(true); });
+  document.getElementById("terms-back").addEventListener("click", function () { closeTerms(false); });
 
   checkAccess();
 })();
