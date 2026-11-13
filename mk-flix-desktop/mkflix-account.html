@@ -61,6 +61,17 @@
   .spin { width: 34px; height: 34px; margin: 20px auto; border: 3px solid var(--line);
     border-top-color: var(--magenta); border-radius: 50%; animation: spin 0.9s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  #sub-badge { text-align: center; margin: 2px 0 16px; }
+  .badge { display: inline-block; padding: 5px 12px; border-radius: 999px; font-size: 12px;
+    font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+  .badge.ok { background: rgba(16,185,129,0.15); color: #34d399; border: 1px solid rgba(16,185,129,0.4); }
+  .badge.off { background: rgba(255,61,87,0.12); color: #ff8095; border: 1px solid rgba(255,61,87,0.4); }
+  .sub-info { margin: 0 0 20px; padding: 0; }
+  .sub-info div { display: flex; justify-content: space-between; gap: 12px; padding: 11px 2px;
+    border-bottom: 1px solid var(--line); font-size: 14px; }
+  .sub-info div:last-child { border-bottom: 0; }
+  .sub-info dt { margin: 0; color: var(--muted); }
+  .sub-info dd { margin: 0; color: var(--text); font-weight: 600; text-align: right; }
   .hidden { display: none; }
   @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
 </style>
@@ -139,10 +150,13 @@
 
     <!-- active -->
     <section data-view="active" class="hidden">
-      <h1>You're all set</h1>
-      <p class="sub" id="active-sub">Your subscription is active.</p>
-      <button id="continue-btn">Continue to MK-Flix</button>
+      <h1>My Subscription</h1>
+      <div id="sub-badge"></div>
+      <dl class="sub-info" id="sub-info"></dl>
+      <button id="sub-primary"></button>
+      <button id="sub-secondary" class="secondary"></button>
       <a class="link" data-go="cinejoyid">Save my CineJoy number</a>
+      <a class="link" id="logout-2">Sign out</a>
     </section>
 
     <!-- can't reach backend -->
@@ -277,7 +291,7 @@
     if (!getAccess()) { show("welcome"); return; }
     authed("/me/subscription").then(function (r) {
       if (r.ok && r.data) {
-        if (r.data.active) { showActive(r.data); }
+        if (r.data.active || (r.data.status && r.data.status !== "NONE")) { showSubscription(r.data); }
         else { showPaywall(); }
       } else if (r.status === 401) {
         clearTokens(); show("welcome");
@@ -287,11 +301,43 @@
     }).catch(function () { show("retry"); });
   }
 
-  function showActive(sub) {
+  function showSubscription(sub) {
+    var active = !!sub.active;
     var end = sub.current_period_end ? new Date(sub.current_period_end) : null;
-    document.getElementById("active-sub").textContent = end
-      ? "Your " + (sub.plan ? sub.plan.name.toLowerCase() + " " : "") + "subscription is active until " + end.toLocaleDateString() + "."
-      : "Your subscription is active.";
+    var labels = { ACTIVE: "Active", EXPIRED: "Expired", CANCELLED: "Cancelled", PENDING: "Pending" };
+    var statusText = active ? "Active" : (labels[sub.status] || "Inactive");
+    document.getElementById("sub-badge").innerHTML =
+      '<span class="badge ' + (active ? "ok" : "off") + '">' + statusText + "</span>";
+
+    var rows = [];
+    if (sub.plan) {
+      rows.push(["Plan", esc(sub.plan.name) +
+        (sub.plan.price ? " \u2014 " + esc(sub.plan.currency) + " " + esc(sub.plan.price) : "")]);
+    }
+    rows.push(["Status", statusText]);
+    if (end) {
+      var dateStr = end.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+      if (active) {
+        var days = Math.ceil((end.getTime() - Date.now()) / 86400000);
+        rows.push(["Renews / expires", dateStr]);
+        rows.push(["Time remaining", days <= 0 ? "less than a day" : days + (days === 1 ? " day" : " days")]);
+      } else {
+        rows.push(["Expired on", dateStr]);
+      }
+    }
+    document.getElementById("sub-info").innerHTML = rows.map(function (r) {
+      return "<div><dt>" + r[0] + "</dt><dd>" + r[1] + "</dd></div>";
+    }).join("");
+
+    var primary = document.getElementById("sub-primary");
+    var secondary = document.getElementById("sub-secondary");
+    if (active) {
+      primary.textContent = "Continue to MK-Flix"; primary.onclick = gotoSite;
+      secondary.textContent = "Renew or change plan"; secondary.onclick = showPaywall;
+    } else {
+      primary.textContent = "Choose a plan"; primary.onclick = showPaywall;
+      secondary.textContent = "Continue to MK-Flix"; secondary.onclick = gotoSite;
+    }
     show("active");
   }
 
@@ -464,7 +510,7 @@
   document.getElementById("password").addEventListener("keydown", function (e) { if (e.key === "Enter") submitAuth(); });
   document.getElementById("pay-btn").addEventListener("click", pay);
   document.getElementById("browse-btn").addEventListener("click", gotoSite);
-  document.getElementById("continue-btn").addEventListener("click", gotoSite);
+  document.getElementById("logout-2").addEventListener("click", logout);
   document.getElementById("retry-btn").addEventListener("click", checkAccess);
   document.getElementById("cj-save").addEventListener("click", saveCinejoy);
   document.getElementById("cj-back").addEventListener("click", backFromCinejoy);

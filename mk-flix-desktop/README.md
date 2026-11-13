@@ -28,6 +28,11 @@ Downloads are on the
   subscribed is decided by the main process (`preload.js` exposes `MKFlixNative`;
   `main.js` holds the session and calls `/me/subscription` itself), so a page on
   cinejoy.pk can't fake it. Shared, identical, with the Android app
+- `mkflix-menu.js` — adds a "My Subscription" item to cinejoy.pk's settings menu
+  (cloned from a real item so it matches the site), opening the gate's
+  subscription page — status, plan and expiry for a subscriber, or the plans for
+  everyone else. The way back to payments after choosing to browse. Shared,
+  identical, with the Android app
 - `splash.html` — startup splash, the same as the Android app's: the MK-Flix
   mark pulsing, the wordmark and a loading bar, drawn over the window while
   cinejoy.pk loads underneath, then faded out. The window opens straight

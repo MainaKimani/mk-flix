@@ -112,6 +112,8 @@ public class MainActivity extends Activity {
     // pages while there is no active subscription and opens the paywall. It
     // reads the subscription through the MKFlixNative bridge below.
     private String enforcerJs = "";
+    // "My Subscription" item added to cinejoy.pk's settings menu (assets/mkflix-menu.js).
+    private String menuJs = "";
     private final Subscription subscription = new Subscription();
     // Backend URL the gate uses, from assets/mkflix-config.json (apiBase). Set
     // by the operator without editing the gate; handed over via getApiBase().
@@ -157,6 +159,7 @@ public class MainActivity extends Activity {
         loadAdBlockList();
         footerJs = readAsset("mkflix-footer.js");
         enforcerJs = readAsset("mkflix-enforcer.js");
+        menuJs = readAsset("mkflix-menu.js");
         apiBaseConfig = readApiBaseConfig();
         subscription.load();
         // The gate and the enforcer talk to the app through this. It is exposed
@@ -259,6 +262,9 @@ public class MainActivity extends Activity {
                 if (!enforcerJs.isEmpty() && isCineJoyUrl(url)) {
                     view.evaluateJavascript(enforcerJs, null);
                 }
+                if (!menuJs.isEmpty() && isCineJoyUrl(url)) {
+                    view.evaluateJavascript(menuJs, null);
+                }
             }
 
             @Override
@@ -342,6 +348,9 @@ public class MainActivity extends Activity {
                         // skipped; it guards against running twice.
                         if (!enforcerJs.isEmpty()) {
                             view.evaluateJavascript(enforcerJs, null);
+                        }
+                        if (!menuJs.isEmpty()) {
+                            view.evaluateJavascript(menuJs, null);
                         }
                     }
                 } catch (Exception ignored) {

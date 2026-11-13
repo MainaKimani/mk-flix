@@ -104,6 +104,8 @@ const logoCss = readOptional('mkflix-logo.css');
 const footerJs = readOptional('mkflix-footer.js');
 // Injected into cinejoy.pk pages: blocks /watch/ playback without a subscription.
 const enforcerJs = readOptional('mkflix-enforcer.js');
+// Adds a "My Subscription" item to cinejoy.pk's settings menu.
+const menuJs = readOptional('mkflix-menu.js');
 ipcMain.on('mkflix:logo-css', (event) => {
   event.returnValue = logoCss;
 });
@@ -199,6 +201,7 @@ app.on('web-contents-created', (_event, contents) => {
     if (host && isCineJoy(host)) {
       if (footerJs) contents.executeJavaScript(footerJs).catch(() => {});
       if (enforcerJs) contents.executeJavaScript(enforcerJs).catch(() => {});
+      if (menuJs) contents.executeJavaScript(menuJs).catch(() => {});
     }
   });
   // A page that fails to load would leave a blank black window, so show
