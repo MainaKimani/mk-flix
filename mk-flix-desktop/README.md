@@ -33,6 +33,10 @@ Downloads are on the
   subscription page — status, plan and expiry for a subscriber, or the plans for
   everyone else. The way back to payments after choosing to browse. Shared,
   identical, with the Android app
+- `mkflix-lock.js` — puts a small golden padlock on each show/movie poster while
+  there's no active subscription, as a hint that the content won't play (the
+  enforcer does the blocking). The locks are non-interactive and disappear once
+  subscribed. Shared, identical, with the Android app
 - `splash.html` — startup splash, the same as the Android app's: the MK-Flix
   mark pulsing, the wordmark and a loading bar, drawn over the window while
   cinejoy.pk loads underneath, then faded out. The window opens straight

@@ -34,6 +34,7 @@
       "mkflix-account.html",
       "mkflix-enforcer.js",
       "mkflix-menu.js",
+      "mkflix-lock.js",
       "mkflix-config.json",
       "package.json"
     ],

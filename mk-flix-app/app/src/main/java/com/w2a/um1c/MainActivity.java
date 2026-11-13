@@ -114,6 +114,8 @@ public class MainActivity extends Activity {
     private String enforcerJs = "";
     // "My Subscription" item added to cinejoy.pk's settings menu (assets/mkflix-menu.js).
     private String menuJs = "";
+    // Golden padlock on each poster while unsubscribed (assets/mkflix-lock.js).
+    private String lockJs = "";
     private final Subscription subscription = new Subscription();
     // Backend URL the gate uses, from assets/mkflix-config.json (apiBase). Set
     // by the operator without editing the gate; handed over via getApiBase().
@@ -160,6 +162,7 @@ public class MainActivity extends Activity {
         footerJs = readAsset("mkflix-footer.js");
         enforcerJs = readAsset("mkflix-enforcer.js");
         menuJs = readAsset("mkflix-menu.js");
+        lockJs = readAsset("mkflix-lock.js");
         apiBaseConfig = readApiBaseConfig();
         subscription.load();
         // The gate and the enforcer talk to the app through this. It is exposed
@@ -265,6 +268,9 @@ public class MainActivity extends Activity {
                 if (!menuJs.isEmpty() && isCineJoyUrl(url)) {
                     view.evaluateJavascript(menuJs, null);
                 }
+                if (!lockJs.isEmpty() && isCineJoyUrl(url)) {
+                    view.evaluateJavascript(lockJs, null);
+                }
             }
 
             @Override
@@ -351,6 +357,9 @@ public class MainActivity extends Activity {
                         }
                         if (!menuJs.isEmpty()) {
                             view.evaluateJavascript(menuJs, null);
+                        }
+                        if (!lockJs.isEmpty()) {
+                            view.evaluateJavascript(lockJs, null);
                         }
                     }
                 } catch (Exception ignored) {
