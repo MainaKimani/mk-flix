@@ -27,4 +27,5 @@ contextBridge.exposeInMainWorld('MKFlixNative', {
   refreshSubscription: () => ipcRenderer.send('mkflix:refresh-subscription'),
   isSubscribed: () => ipcRenderer.sendSync('mkflix:is-subscribed'),
   openPaywall: () => ipcRenderer.send('mkflix:open-paywall'),
+  openSubscription: () => ipcRenderer.send('mkflix:open-subscription'),
 });

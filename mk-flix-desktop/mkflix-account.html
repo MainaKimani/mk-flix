@@ -4,7 +4,11 @@
      MK-Flix backend for an active subscription and only then sends the WebView
      to the site. Otherwise it walks the user through sign-in, the plans and an
      M-Pesa payment. Talks to the backend over fetch with a JWT kept in
-     localStorage; no cookies. -->
+     localStorage; no cookies.
+     Opened as mkflix-account.html#subscription (the "My Subscription" menu
+     entry) it shows the subscription page instead of going straight to the
+     site. -->
+
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -124,6 +128,7 @@
     <section data-view="plans" class="hidden">
       <h1>Choose a plan</h1>
       <p class="sub">Pay with M-Pesa. Your subscription starts right away.</p>
+      <div class="note hidden" id="pay-note" role="status"></div>
       <div id="plan-list"></div>
       <label for="phone" style="margin-top:18px">M-Pesa phone number</label>
       <input id="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="07XX XXX XXX">
@@ -301,7 +306,7 @@
   // subscription page; otherwise (and from the subscription page) return to the
   // site, i.e. back to browsing.
   function goBack() {
-    if (currentView() === "plans" && paywallReturn === "subscription") checkAccess();
+    if (currentView() === "plans" && paywallReturn === "subscription") checkAccess("subscription");
     else gotoSite();
   }
 
@@ -328,7 +333,15 @@
   }
 
   // --- Flow ----------------------------------------------------------------
-  function checkAccess() {
+  // Where the gate was opened from decides what a subscriber sees:
+  //   "launch"       (app start, sign-in, a blocked Play): straight to the site;
+  //                  without a subscription, the paywall says why.
+  //   "subscription" (the "My Subscription" menu, after a payment): the
+  //                  subscription page.
+  var entryMode = location.hash === "#subscription" ? "subscription" : "launch";
+
+  function checkAccess(mode) {
+    mode = mode || entryMode;
     show("loading");
     if (!getAccess()) { show("welcome"); return; }
     authed("/me/subscription").then(function (r) {
@@ -338,14 +351,37 @@
         // token refresh) it would otherwise be checking with nothing, or with a
         // stale token, and keep treating a subscriber as unsubscribed.
         nativeSaveSession();
-        if (r.data.active || (r.data.status && r.data.status !== "NONE")) { showSubscription(r.data); }
-        else { showPaywall(); }
+        var sub = r.data;
+        if (mode === "subscription") {
+          if (sub.active || (sub.status && sub.status !== "NONE")) showSubscription(sub);
+          else showPaywall(inactiveNotice(sub));
+        } else if (sub.active) {
+          enterSite();
+        } else {
+          showPaywall(inactiveNotice(sub));
+        }
       } else if (r.status === 401) {
         clearTokens(); show("welcome");
       } else {
         show("retry");
       }
     }).catch(function () { show("retry"); });
+  }
+
+  // Why there's no active subscription, for the note on the paywall.
+  function inactiveNotice(sub) {
+    var end = sub && sub.current_period_end ? new Date(sub.current_period_end) : null;
+    var dateStr = end && !isNaN(end.getTime())
+      ? end.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }) : "";
+    if (sub && sub.status === "CANCELLED") {
+      return "Your subscription was cancelled. Choose a plan to keep watching.";
+    }
+    if (sub && (sub.status === "EXPIRED" || sub.status === "ACTIVE" || end)) {
+      return dateStr
+        ? "Your subscription expired on " + dateStr + ". Choose a plan to keep watching."
+        : "Your subscription has expired. Choose a plan to keep watching.";
+    }
+    return "There's no active subscription on this account. Choose a plan to start watching.";
   }
 
   function showSubscription(sub) {
@@ -418,7 +454,7 @@
       if (r.ok) {
         var tokens = r.data.tokens || r.data; // register wraps tokens; login is flat
         setTokens(tokens.access, tokens.refresh);
-        checkAccess();
+        checkAccess("launch");
       } else {
         err.textContent = firstError(r.data) || "That didn't work. Please try again.";
       }
@@ -438,9 +474,13 @@
   // --- Paywall -------------------------------------------------------------
   var selectedPlan = null;
   var paywallReturn = "site";
-  function showPaywall() {
+  // `notice` (optional) explains why the user is here, e.g. an expired plan.
+  function showPaywall(notice) {
     paywallReturn = "site";
     selectedPlan = null;
+    var note = document.getElementById("pay-note");
+    note.textContent = typeof notice === "string" ? notice : "";
+    note.classList.toggle("hidden", typeof notice !== "string" || !notice);
     document.getElementById("pay-btn").disabled = true;
     document.getElementById("pay-err").textContent = "";
     var list = document.getElementById("plan-list");
@@ -499,7 +539,7 @@
     authed("/payments/" + id).then(function (r) {
       if (r.ok && r.data) {
         var s = r.data.status;
-        if (s === "SUCCEEDED") { nativeRefresh(); checkAccess(); return; }
+        if (s === "SUCCEEDED") { nativeRefresh(); checkAccess("subscription"); return; }
         if (s === "FAILED" || s === "CANCELLED") {
           document.getElementById("poll-err").textContent = "Payment wasn't completed.";
           setTimeout(showPaywall, 2500);
@@ -538,7 +578,7 @@
   }
 
   function backFromCinejoy() {
-    if (cinejoyReturn === "active") { checkAccess(); }
+    if (cinejoyReturn === "active") { checkAccess("subscription"); }
     else { showPaywall(); }
   }
 
@@ -561,7 +601,7 @@
   document.getElementById("pay-btn").addEventListener("click", pay);
   document.getElementById("browse-btn").addEventListener("click", gotoSite);
   document.getElementById("logout-2").addEventListener("click", logout);
-  document.getElementById("retry-btn").addEventListener("click", checkAccess);
+  document.getElementById("retry-btn").addEventListener("click", function () { checkAccess(); });
   document.getElementById("back-btn").addEventListener("click", goBack);
   document.getElementById("cj-save").addEventListener("click", saveCinejoy);
   document.getElementById("cj-back").addEventListener("click", backFromCinejoy);

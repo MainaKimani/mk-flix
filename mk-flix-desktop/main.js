@@ -185,6 +185,12 @@ ipcMain.on('mkflix:open-paywall', (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (win) win.loadFile(path.join(__dirname, 'mkflix-account.html'));
 });
+// The "My Subscription" menu entry: the gate opened on its subscription page
+// (a subscriber would otherwise be sent straight back to the site).
+ipcMain.on('mkflix:open-subscription', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win) win.loadFile(path.join(__dirname, 'mkflix-account.html'), { hash: 'subscription' });
+});
 
 function isWatchUrl(url) {
   try {

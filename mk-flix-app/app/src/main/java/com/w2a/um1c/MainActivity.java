@@ -708,9 +708,22 @@ public class MainActivity extends Activity {
 
     /** Send the WebView back to the account gate, which shows the paywall. */
     private void openPaywall() {
+        loadOnUiThread(ACCOUNT_PAGE);
+    }
+
+    /**
+     * The "My Subscription" menu entry: the account gate opened on its
+     * subscription page (a subscriber would otherwise go straight back to the
+     * site).
+     */
+    private void openSubscription() {
+        loadOnUiThread(ACCOUNT_PAGE + "#subscription");
+    }
+
+    private void loadOnUiThread(String url) {
         runOnUiThread(() -> {
             if (webView != null) {
-                webView.loadUrl(ACCOUNT_PAGE);
+                webView.loadUrl(url);
             }
         });
     }
@@ -1370,6 +1383,11 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void openPaywall() {
             MainActivity.this.openPaywall();
+        }
+
+        @JavascriptInterface
+        public void openSubscription() {
+            MainActivity.this.openSubscription();
         }
     }
 

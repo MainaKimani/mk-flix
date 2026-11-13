@@ -137,7 +137,12 @@
     pay.addEventListener("click", function (e) {
       e.preventDefault();
       e.stopPropagation();
-      try { B.openPaywall(); } catch (_) {}
+      // openSubscription opens the gate on the subscription page; openPaywall
+      // would send a subscriber straight back to the site.
+      try {
+        if (B.openSubscription) B.openSubscription();
+        else B.openPaywall();
+      } catch (_) {}
     }, true);
     return pay;
   }
