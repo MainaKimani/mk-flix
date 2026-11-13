@@ -72,12 +72,19 @@
   .sub-info div:last-child { border-bottom: 0; }
   .sub-info dt { margin: 0; color: var(--muted); }
   .sub-info dd { margin: 0; color: var(--text); font-weight: 600; text-align: right; }
+  .card-rel { position: relative; }
+  .back { position: absolute; top: 14px; left: 14px; width: 38px; height: 38px; padding: 0;
+    display: flex; align-items: center; justify-content: center; border-radius: 50%;
+    background: transparent; border: 1px solid var(--line); color: var(--text); cursor: pointer; }
+  .back:hover { border-color: var(--magenta); }
+  .back svg { width: 20px; height: 20px; display: block; }
   .hidden { display: none; }
   @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
 </style>
 </head>
 <body>
-  <div class="card">
+  <div class="card card-rel">
+    <button id="back-btn" class="back hidden" type="button" aria-label="Go back" title="Go back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg></button>
     <img class="logo" src="icon.png" alt="">
     <div class="brand">MK-Flix</div>
 
@@ -279,8 +286,23 @@
     for (var i = 0; i < views.length; i++) {
       views[i].classList.toggle("hidden", views[i].getAttribute("data-view") !== name);
     }
+    var back = document.getElementById("back-btn");
+    if (back) back.classList.toggle("hidden", !(name === "plans" || name === "active"));
     var first = document.querySelector('[data-view="' + name + '"] input, [data-view="' + name + '"] button');
     if (first && first.tagName === "INPUT") { try { first.focus(); } catch (e) {} }
+  }
+
+  function currentView() {
+    var v = document.querySelector("[data-view]:not(.hidden)");
+    return v ? v.getAttribute("data-view") : null;
+  }
+
+  // The top-left back arrow: from the paywall reached via Renew, go back to the
+  // subscription page; otherwise (and from the subscription page) return to the
+  // site, i.e. back to browsing.
+  function goBack() {
+    if (currentView() === "plans" && paywallReturn === "subscription") checkAccess();
+    else gotoSite();
   }
 
   function gotoSite() { window.location.href = CINEJOY_URL; }
@@ -333,7 +355,8 @@
     var secondary = document.getElementById("sub-secondary");
     if (active) {
       primary.textContent = "Continue to MK-Flix"; primary.onclick = gotoSite;
-      secondary.textContent = "Renew or change plan"; secondary.onclick = showPaywall;
+      secondary.textContent = "Renew or change plan";
+      secondary.onclick = function () { showPaywall(); paywallReturn = "subscription"; };
     } else {
       primary.textContent = "Choose a plan"; primary.onclick = showPaywall;
       secondary.textContent = "Continue to MK-Flix"; secondary.onclick = gotoSite;
@@ -389,7 +412,9 @@
 
   // --- Paywall -------------------------------------------------------------
   var selectedPlan = null;
+  var paywallReturn = "site";
   function showPaywall() {
+    paywallReturn = "site";
     selectedPlan = null;
     document.getElementById("pay-btn").disabled = true;
     document.getElementById("pay-err").textContent = "";
@@ -512,6 +537,7 @@
   document.getElementById("browse-btn").addEventListener("click", gotoSite);
   document.getElementById("logout-2").addEventListener("click", logout);
   document.getElementById("retry-btn").addEventListener("click", checkAccess);
+  document.getElementById("back-btn").addEventListener("click", goBack);
   document.getElementById("cj-save").addEventListener("click", saveCinejoy);
   document.getElementById("cj-back").addEventListener("click", backFromCinejoy);
   document.getElementById("logout-1").addEventListener("click", logout);
