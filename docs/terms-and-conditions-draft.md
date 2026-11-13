@@ -38,10 +38,12 @@ by or affiliated with the third-party platform or any studio, broadcaster
 or rights holder whose content appears on it. Their names and trademarks
 belong to their owners.
 
-3.2 **Your third-party account.** To watch content you need your own
-account with the third-party platform. That platform's own terms continue
-to apply to your use of its content. You are responsible for complying
-with them and with the law that applies to you.
+3.2 **Your third-party account.** You do not need an account with the
+third-party platform to watch content. If you choose to create one or sign
+in to one through Blendy Play, for example so your experience follows you
+across your devices, that account is between you and the platform. The
+platform's own terms apply to your use of its content either way. You are
+responsible for complying with them and with the law that applies to you.
 
 3.3 **We do not control third-party content.** We do not choose, review,
 edit or license the content on the third-party platform. We are not
