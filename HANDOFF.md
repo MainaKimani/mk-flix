@@ -98,6 +98,8 @@ account is required, and must never point users at cinejoy.pk.
 ## Commits (newest first)
 
 blendy-play commits:
+- `8334b78` editable customer page (details, subscription) and a Plans page
+- `2b6da62` interceptor matches token-free paths exactly (`/dashboard/plans` was sent without a token)
 - `afd93c5` payment search hint mentions the receipt reference
 - `5a80018` `/forgot-password` and `/reset-password` pages; no-referrer
 - `4b79415` show/hide eye on password fields; "at least 6 characters" hint
@@ -127,6 +129,7 @@ mk-flix commits:
 - `7aada6f` the account gate (onboarding + M-Pesa paywall) wired into both apps
 
 mk-flix-be commits:
+- `3a1fef2` admin editing of customers, subscriptions and plans (132 tests)
 - `f91ffae` the bare domain redirects to the portal
 - `c53460b` cPanel deploy: `passenger_wsgi.py`, WhiteNoise, production checks, SQLite IMMEDIATE transactions, `DEPLOY.md` (117 tests)
 - `56a6096` payment receipt email; dashboard search by receipt reference (111 tests)
@@ -326,8 +329,20 @@ backend). Step-by-step guide: `mk-flix-be/DEPLOY.md`.
   reason).
 - **Subscription state** is what the customer experiences: a record still
   marked ACTIVE whose period has ended is shown as expired.
+- **Editing a customer** (their page): name, email, phone, "email confirmed"
+  and "suspended" (an inactive account's tokens are refused, so it's signed out
+  everywhere). Subscription: add days (stacks on the time left, like a
+  payment) or set plan, status and end date by hand. Neither records a
+  payment, so revenue stays what M-Pesa paid. Accounts deleted by their owner
+  are read-only. Code: `mk-flix-be/dashboard/editing.py`.
+- **Plans** page: create, edit, hide (off the paywall, subscribers keep their
+  time) and delete (only a plan nobody paid for or subscribes to). Prices are
+  whole shillings (M-Pesa drops cents); a price change affects new payments
+  only; a plan's code is fixed once created (the apps pay by code). The
+  interval only picks the app's "Billed weekly/monthly" label; `duration_days`
+  sets the length. The gate only knows WEEK and MONTH labels.
 - **Privacy:** CineJoy numbers are never returned, only whether one is saved.
-  Read-only for now: no refunds, manual extensions or account actions yet.
+  No refunds from the dashboard.
 
 ## Releases and in-app updates
 
@@ -429,7 +444,8 @@ For local testing: `MKFLIX_API_BASE=http://localhost:8000/api npm start`.
 - **Finish the deploy:** the backend is live (checked: `/api/plans`, admin
   with its CSS, CORS for the portal). Still to do: upload `portal.zip` to
   `blendy.mainakimani.com`, add the two cron jobs, upload the root redirect
-  (`mkflix_be/urls.py`), and run `DEPLOY.md` step 8 end to end.
+  (`mkflix_be/urls.py`) and the dashboard editing (`3a1fef2`: run `migrate`
+  for its new column), and run `DEPLOY.md` step 8 end to end.
 - **Go live with M-Pesa:** Safaricom approval, live keys/shortcode/passkey,
   `MPESA_BASE_URL=https://api.safaricom.co.ke`, the deployed callback, the IP
   allowlist with `MPESA_WEBHOOK_ENFORCE_IP=True`, prices restored. **Open
