@@ -28,4 +28,22 @@ contextBridge.exposeInMainWorld('MKFlixNative', {
   isSubscribed: () => ipcRenderer.sendSync('mkflix:is-subscribed'),
   openPaywall: () => ipcRenderer.send('mkflix:open-paywall'),
   openSubscription: () => ipcRenderer.send('mkflix:open-subscription'),
+  // Version and platform, sent to the backend as X-App-Version / X-App-Platform.
+  getAppVersion: () => appInfo().version,
+  getPlatform: () => appInfo().platform,
+  // In-app updates (see updater.js). Only the account gate gets real answers.
+  checkUpdate: () => ipcRenderer.invoke('mkflix:update-check'),
+  startUpdate: () => ipcRenderer.invoke('mkflix:update-start'),
+  onUpdateProgress: (callback) => {
+    ipcRenderer.removeAllListeners('mkflix:update-progress');
+    ipcRenderer.on('mkflix:update-progress', (_event, p) => callback(p.received, p.total));
+  },
+  dismissUpdate: (version) => ipcRenderer.send('mkflix:update-later', version),
+  openDownloads: () => ipcRenderer.send('mkflix:open-downloads'),
 });
+
+let info = null;
+function appInfo() {
+  if (!info) info = ipcRenderer.sendSync('mkflix:app-info');
+  return info;
+}

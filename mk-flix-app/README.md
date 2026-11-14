@@ -1,7 +1,8 @@
 # 🎬 Blendy Play — Android app
 
 Android client for [cinejoy.pk](https://cinejoy.pk/): a fullscreen WebView
-with ad blocking, Blendy Play branding and a proper error screen.
+with ad blocking, Blendy Play branding, a proper error screen and in-app
+updates.
 
 - Application id: `com.mainakimani.blendyplay`, signed with the Blendy Play
   release key. It's a different app from MK-Flix (`com.w2a.um1c`, the old
@@ -13,7 +14,11 @@ with ad blocking, Blendy Play branding and a proper error screen.
 
 ## What's where
 
-All the app's code is in `app/src/main/java/com/w2a/um1c/MainActivity.java`:
+The app's code is in `app/src/main/java/com/w2a/um1c/`: `MainActivity.java`,
+plus `AppUpdater.java` for in-app updates (checks the signed release
+manifest at `blendy.mainakimani.com/downloads/`, downloads and verifies the
+APK, and hands it to Android's installer; see `../release/README.md`).
+`MainActivity.java` covers:
 
 - **WebView setup** and the **ad blocker** (requests to hosts in
   `assets/adblock-hosts.txt` get a 404, subdomains included)
@@ -130,7 +135,8 @@ Gradle. It reads the package name and version from `app/build.gradle.kts`.
 
 ### Signed release builds
 
-`assembleRelease` signs with the release key named by these Gradle properties,
+`assembleRelease`, and `release/publish.mjs` for builds made with
+`build-apk.sh`, sign with the release key named by these Gradle properties,
 normally in `~/.gradle/gradle.properties` on the machine that publishes
 releases:
 

@@ -88,6 +88,7 @@ with zipfile.ZipFile(apk_path, 'a', zipfile.ZIP_STORED) as z:
     z.write(dex_path, 'classes.dex')
 EOF
 
+# release/publish.mjs signs $OUT/app-aligned.apk with the release key.
 echo "==> zipalign + apksigner"
 "$BT/zipalign" -f 4 "$OUT/app-unsigned.apk" "$OUT/app-aligned.apk"
 "$BT/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:android --key-pass pass:android \

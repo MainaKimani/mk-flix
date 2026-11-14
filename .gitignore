@@ -20,3 +20,6 @@ debug.keystore
 # OS clutter
 .DS_Store
 Thumbs.db
+
+# Release tool output (signed APK, installers, manifest)
+release/out/

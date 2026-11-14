@@ -117,6 +117,12 @@ public class MainActivity extends Activity {
     // Golden padlock on each poster while unsubscribed (assets/mkflix-lock.js).
     private String lockJs = "";
     private final Subscription subscription = new Subscription();
+
+    // In-app updates (see AppUpdater). pageUrl lets the bridge serve update
+    // calls to the account gate only, never to a page on cinejoy.pk.
+    private AppUpdater updater;
+    private volatile String pageUrl = "";
+    private android.content.BroadcastReceiver installReceiver;
     // Backend URL the gate uses, from assets/mkflix-config.json (apiBase). Set
     // by the operator without editing the gate; handed over via getApiBase().
     private String apiBaseConfig = "";
@@ -163,7 +169,14 @@ public class MainActivity extends Activity {
         enforcerJs = readAsset("mkflix-enforcer.js");
         menuJs = readAsset("mkflix-menu.js");
         lockJs = readAsset("mkflix-lock.js");
-        apiBaseConfig = readApiBaseConfig();
+        apiBaseConfig = readConfigValue("apiBase");
+        updater = new AppUpdater(this, readConfigValue("updateUrl"));
+        installReceiver = AppUpdater.installStatusReceiver(this, message -> sendUpdateResult(false, null, message));
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(installReceiver, AppUpdater.installStatusFilter(), Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(installReceiver, AppUpdater.installStatusFilter());
+        }
         subscription.load();
         // The gate and the enforcer talk to the app through this. It is exposed
         // to cinejoy.pk too, but exposes nothing that lets a page there grant
@@ -244,6 +257,7 @@ public class MainActivity extends Activity {
             @Override
             public void onPageStarted(WebView view, String url, Bitmap favicon) {
                 super.onPageStarted(view, url, favicon);
+                pageUrl = url == null ? "" : url;
                 if (isWebUrl(url)) {
                     loadingUrl = url;
                 }
@@ -728,10 +742,13 @@ public class MainActivity extends Activity {
         });
     }
 
-    /** The backend URL from assets/mkflix-config.json (apiBase), or "". */
-    private String readApiBaseConfig() {
+    /**
+     * A setting from assets/mkflix-config.json, or "": apiBase (the backend)
+     * or updateUrl (a test release manifest instead of the real one).
+     */
+    private String readConfigValue(String key) {
         try {
-            return new JSONObject(readAsset("mkflix-config.json")).optString("apiBase", "").trim();
+            return new JSONObject(readAsset("mkflix-config.json")).optString(key, "").trim();
         } catch (Exception e) {
             return "";
         }
@@ -1326,6 +1343,9 @@ public class MainActivity extends Activity {
             try {
                 conn = (HttpURLConnection) new URL(base + "/me/subscription").openConnection();
                 conn.setRequestProperty("Authorization", "Bearer " + token);
+                // Lets the backend refuse versions older than its minimum (426).
+                conn.setRequestProperty("X-App-Version", updater.currentVersion());
+                conn.setRequestProperty("X-App-Platform", "android");
                 conn.setConnectTimeout(15000);
                 conn.setReadTimeout(15000);
                 if (conn.getResponseCode() != 200) {
@@ -1389,6 +1409,109 @@ public class MainActivity extends Activity {
         public void openSubscription() {
             MainActivity.this.openSubscription();
         }
+
+        // Version and platform, sent to the backend as X-App-Version / X-App-Platform.
+        @JavascriptInterface
+        public String getAppVersion() {
+            return updater.currentVersion();
+        }
+
+        @JavascriptInterface
+        public String getPlatform() {
+            return "android";
+        }
+
+        // In-app updates. The answers come back through window.mkflixUpdateState,
+        // mkflixUpdateProgress and mkflixUpdateResult in the gate.
+        @JavascriptInterface
+        public void checkUpdate() {
+            if (!onGate()) {
+                return;
+            }
+            new Thread(() -> {
+                String json;
+                try {
+                    json = updater.check().toString();
+                } catch (Exception e) {
+                    json = "{\"status\":\"error\"}";
+                }
+                callGate("mkflixUpdateState", JSONObject.quote(json));
+            }).start();
+        }
+
+        @JavascriptInterface
+        public void startUpdate() {
+            if (!onGate()) {
+                return;
+            }
+            new Thread(() -> {
+                try {
+                    java.io.File apk = updater.download((received, total) ->
+                            callGate("mkflixUpdateProgress", received + "," + total));
+                    runOnUiThread(() -> {
+                        try {
+                            AppUpdater.InstallStep step = updater.install(apk);
+                            sendUpdateResult(true, step == AppUpdater.InstallStep.PERMISSION ? "permission" : "prompt", null);
+                        } catch (Exception e) {
+                            sendUpdateResult(false, null, "The update couldn't be installed. Try again.");
+                        }
+                    });
+                } catch (SecurityException e) {
+                    sendUpdateResult(false, null, e.getMessage());
+                } catch (Exception e) {
+                    sendUpdateResult(false, null, "The update didn't download. Check your connection and try again.");
+                }
+            }).start();
+        }
+
+        @JavascriptInterface
+        public void dismissUpdate(String version) {
+            if (onGate() && version != null) {
+                updater.dismiss(version);
+            }
+        }
+
+        @JavascriptInterface
+        public void openDownloads() {
+            if (!onGate()) {
+                return;
+            }
+            runOnUiThread(() -> {
+                try {
+                    startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(updater.downloadsPage())));
+                } catch (ActivityNotFoundException e) {
+                    Toast.makeText(MainActivity.this, updater.downloadsPage(), Toast.LENGTH_LONG).show();
+                }
+            });
+        }
+    }
+
+    private boolean onGate() {
+        return pageUrl.startsWith(ACCOUNT_PAGE);
+    }
+
+    /** Call window.<fn>(<args>) in the gate, if it's still the page showing. */
+    private void callGate(String fn, String args) {
+        runOnUiThread(() -> {
+            if (webView != null && onGate()) {
+                webView.evaluateJavascript("window." + fn + " && window." + fn + "(" + args + ")", null);
+            }
+        });
+    }
+
+    private void sendUpdateResult(boolean ok, String mode, String message) {
+        try {
+            JSONObject r = new JSONObject().put("ok", ok);
+            if (mode != null) {
+                r.put("mode", mode);
+            }
+            if (message != null) {
+                r.put("message", message);
+            }
+            callGate("mkflixUpdateResult", JSONObject.quote(r.toString()));
+        } catch (Exception ignored) {
+            // JSONObject.put only throws for invalid numbers
+        }
     }
 
     @Override
@@ -1417,6 +1540,13 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (installReceiver != null) {
+            try {
+                unregisterReceiver(installReceiver);
+            } catch (IllegalArgumentException ignored) {
+                // not registered
+            }
+        }
         if (splashPulse != null) {
             splashPulse.cancel();
             splashPulse = null;

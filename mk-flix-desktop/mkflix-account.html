@@ -112,6 +112,12 @@
   button.pw-toggle:hover { color: var(--text); }
   .pw-toggle svg { width: 20px; height: 20px; display: block; }
   .hint { color: var(--muted); font-size: 12px; margin: 6px 2px 0; }
+  /* In-app update */
+  .notes { margin: 0 0 16px; padding: 0 0 0 18px; color: var(--muted); font-size: 14px; line-height: 1.6; }
+  .progress { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; margin: 6px 0 4px; }
+  .progress span { display: block; height: 100%; width: 0; border-radius: 4px;
+    background: linear-gradient(90deg, var(--cyan), var(--magenta), var(--red)); transition: width 0.2s; }
+  .update-meta { color: var(--muted); font-size: 13px; text-align: center; margin: 0 0 4px; }
   .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .hidden { display: none; }
   @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
@@ -189,6 +195,20 @@
       <div class="ok-note" id="verify-ok" role="status"></div>
       <a class="link" id="verify-resend">Send a new code</a>
       <a class="link" id="verify-logout">Use a different email</a>
+    </section>
+
+    <!-- in-app update: optional (Update now / Later) or required (no way past) -->
+    <section data-view="update" class="hidden">
+      <h1 id="update-title">Update available</h1>
+      <p class="sub" id="update-sub"></p>
+      <ul class="notes hidden" id="update-notes"></ul>
+      <p class="update-meta" id="update-meta"></p>
+      <div class="progress hidden" id="update-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-label="Download progress"><span></span></div>
+      <div class="ok-note" id="update-status" role="status"></div>
+      <div class="err" id="update-err" role="alert"></div>
+      <button id="update-now">Update now</button>
+      <button class="secondary" id="update-later">Later</button>
+      <a class="link hidden" id="update-site">Download it from the Blendy Play website</a>
     </section>
 
     <!-- paywall -->
@@ -385,6 +405,14 @@
   function request(path, opts) {
     opts = opts || {};
     var headers = { "Content-Type": "application/json" };
+    // The backend refuses app versions below its minimum with 426.
+    var N = window.MKFlixNative;
+    if (N && N.getAppVersion) {
+      try {
+        headers["X-App-Version"] = N.getAppVersion();
+        headers["X-App-Platform"] = N.getPlatform ? N.getPlatform() : "";
+      } catch (e) {}
+    }
     if (opts.auth) {
       var t = getAccess();
       if (t) headers["Authorization"] = "Bearer " + t;
@@ -397,6 +425,7 @@
       return res.text().then(function (text) {
         var data = null;
         try { data = text ? JSON.parse(text) : null; } catch (e) {}
+        if (res.status === 426) requireUpdate();
         return { ok: res.ok, status: res.status, data: data };
       });
     });
@@ -423,6 +452,8 @@
 
   // --- View switching ------------------------------------------------------
   function show(name) {
+    // A required update blocks every other screen.
+    if (updateBlocking && name !== "update") return;
     var views = document.querySelectorAll("[data-view]");
     for (var i = 0; i < views.length; i++) {
       views[i].classList.toggle("hidden", views[i].getAttribute("data-view") !== name);
@@ -504,6 +535,155 @@
         show("retry");
       }
     }).catch(function () { show("retry"); });
+  }
+
+  // --- In-app updates --------------------------------------------------------
+  // At launch the app checks its signed release manifest (MKFlixNative
+  // .checkUpdate). A newer version below the manifest's minimum is required:
+  // its screen has no way past. Otherwise it's optional, with "Later". The
+  // desktop bridge returns promises; Android answers by calling
+  // window.mkflixUpdateState / mkflixUpdateProgress / mkflixUpdateResult.
+  var updateBlocking = false;
+  var updateInfo = null;
+  var UPDATE_CHECK_MS = 6000;
+
+  function askForUpdate(callback) {
+    var N = window.MKFlixNative;
+    if (!N || !N.checkUpdate) { callback(null); return; }
+    var answered = false;
+    function answer(state) {
+      if (answered) return;
+      answered = true;
+      clearTimeout(timer);
+      if (typeof state === "string") { try { state = JSON.parse(state); } catch (e) { state = null; } }
+      callback(state);
+    }
+    // A slow or missing network never holds up the app.
+    var timer = setTimeout(function () { answer(null); }, UPDATE_CHECK_MS);
+    window.mkflixUpdateState = answer;
+    try {
+      var r = N.checkUpdate();
+      if (r && typeof r.then === "function") r.then(answer, function () { answer(null); });
+    } catch (e) { answer(null); }
+  }
+
+  // Once per app start (the gate is reloaded each time the site sends the
+  // user back to it, so remember the check for this session).
+  function startUp() {
+    var checked = false;
+    try { checked = sessionStorage.getItem("mkflix_update_checked") === "1"; } catch (e) {}
+    if (checked) { checkAccess(); return; }
+    try { sessionStorage.setItem("mkflix_update_checked", "1"); } catch (e) {}
+    show("loading");
+    askForUpdate(function (state) {
+      if (state && state.status === "required") showUpdate(state);
+      else if (state && state.status === "optional" && !state.dismissed) showUpdate(state);
+      else checkAccess();
+    });
+  }
+
+  // The backend said this version is too old (426): block, and offer the
+  // update if the manifest has one, or the website if it can't be reached.
+  function requireUpdate() {
+    if (updateBlocking) return;
+    updateBlocking = true;
+    show("update");
+    document.getElementById("update-title").textContent = "Update required";
+    document.getElementById("update-sub").textContent = "Checking for the latest version…";
+    askForUpdate(function (state) {
+      if (state && state.status !== "none" && state.status !== "error") showUpdate(state, true);
+      else showUpdate({ status: "required", unknown: true }, true);
+    });
+  }
+
+  function showUpdate(state, forced) {
+    var required = forced || state.status === "required";
+    updateInfo = state;
+    updateBlocking = required;
+    var N = window.MKFlixNative || {};
+    var canInstall = !state.unknown && !!N.startUpdate;
+    document.getElementById("update-title").textContent = required ? "Update required" : "Update available";
+    var sub = document.getElementById("update-sub");
+    if (state.unknown) {
+      sub.textContent = "This version of Blendy Play is no longer supported. Download the latest version to keep watching.";
+    } else if (required) {
+      sub.textContent = "Blendy Play " + state.current + " is no longer supported. Update to version " + state.version + " to keep watching.";
+    } else {
+      sub.textContent = "Blendy Play " + state.version + " is ready. You have " + state.current + ".";
+    }
+    var notes = document.getElementById("update-notes");
+    notes.innerHTML = (state.notes || []).map(function (n) { return "<li>" + esc(n) + "</li>"; }).join("");
+    notes.classList.toggle("hidden", !(state.notes && state.notes.length));
+    var meta = [];
+    if (state.size) meta.push("Download size " + (state.size / 1048576).toFixed(state.size < 10485760 ? 1 : 0) + " MB");
+    if (state.install === "auto") meta.push("Blendy Play closes, updates and opens again");
+    else if (state.install === "open") meta.push("The installer opens when the download finishes");
+    else if (state.install === "android") meta.push("Android asks you to confirm the update");
+    document.getElementById("update-meta").textContent = meta.join(". ") + (meta.length ? "." : "");
+    document.getElementById("update-progress").classList.add("hidden");
+    document.getElementById("update-status").textContent = "";
+    document.getElementById("update-err").textContent = "";
+    var now = document.getElementById("update-now");
+    now.disabled = false;
+    now.textContent = "Update now";
+    now.classList.toggle("hidden", !canInstall);
+    document.getElementById("update-later").classList.toggle("hidden", required);
+    document.getElementById("update-site").classList.toggle("hidden", canInstall && !required);
+    show("update");
+  }
+
+  function setUpdateProgress(received, total) {
+    var bar = document.getElementById("update-progress");
+    bar.classList.remove("hidden");
+    var pct = total ? Math.min(100, Math.round((received / total) * 100)) : 0;
+    bar.querySelector("span").style.width = pct + "%";
+    bar.setAttribute("aria-valuenow", String(pct));
+    document.getElementById("update-status").textContent = total
+      ? "Downloading… " + pct + "%" : "Downloading…";
+  }
+
+  function onUpdateResult(res) {
+    if (typeof res === "string") { try { res = JSON.parse(res); } catch (e) { res = null; } }
+    var now = document.getElementById("update-now");
+    var status = document.getElementById("update-status");
+    if (!res || !res.ok) {
+      now.disabled = false;
+      now.textContent = "Try again";
+      status.textContent = "";
+      document.getElementById("update-err").textContent =
+        (res && res.message) || "The update didn't download. Check your connection and try again.";
+      document.getElementById("update-site").classList.remove("hidden");
+      return;
+    }
+    if (res.mode === "auto") status.textContent = "Installing… Blendy Play will open again in a moment.";
+    else if (res.mode === "open") status.textContent = "The installer has opened. Follow its steps, then open Blendy Play again.";
+    else if (res.mode === "prompt") status.textContent = "Confirm the update in the window Android shows.";
+    else if (res.mode === "permission") {
+      status.textContent = "Allow Blendy Play to install apps in the settings that opened, then come back and choose Update now.";
+      now.disabled = false;
+    }
+  }
+
+  function startUpdate() {
+    var N = window.MKFlixNative;
+    if (!N || !N.startUpdate || !updateInfo) return;
+    document.getElementById("update-now").disabled = true;
+    document.getElementById("update-err").textContent = "";
+    setUpdateProgress(0, 0);
+    window.mkflixUpdateProgress = setUpdateProgress;
+    window.mkflixUpdateResult = onUpdateResult;
+    if (N.onUpdateProgress) N.onUpdateProgress(setUpdateProgress);
+    try {
+      var r = N.startUpdate();
+      if (r && typeof r.then === "function") r.then(onUpdateResult, function () { onUpdateResult(null); });
+    } catch (e) { onUpdateResult(null); }
+  }
+
+  function laterUpdate() {
+    var N = window.MKFlixNative;
+    if (updateBlocking) return;
+    if (N && N.dismissUpdate && updateInfo) N.dismissUpdate(updateInfo.version);
+    checkAccess();
   }
 
   // --- Email verification ----------------------------------------------------
@@ -911,6 +1091,12 @@
       try { document.getElementById(btn.getAttribute("data-for")).focus(); } catch (e) {}
     });
   });
+  document.getElementById("update-now").addEventListener("click", startUpdate);
+  document.getElementById("update-later").addEventListener("click", laterUpdate);
+  document.getElementById("update-site").addEventListener("click", function () {
+    var N = window.MKFlixNative;
+    if (N && N.openDownloads) N.openDownloads();
+  });
   document.getElementById("auth-forgot").addEventListener("click", openForgot);
   document.getElementById("forgot-submit").addEventListener("click", submitForgot);
   document.getElementById("forgot-email").addEventListener("keydown", function (e) { if (e.key === "Enter") submitForgot(); });
@@ -929,7 +1115,7 @@
   document.getElementById("terms-agree").addEventListener("click", function () { closeTerms(true); });
   document.getElementById("terms-back").addEventListener("click", function () { closeTerms(false); });
 
-  checkAccess();
+  startUp();
 })();
 </script>
 </body>

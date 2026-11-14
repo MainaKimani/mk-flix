@@ -23,6 +23,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "updater.js",
       "mkflix-logo.css",
       "mkflix-footer.js",
       "adblock-hosts.txt",

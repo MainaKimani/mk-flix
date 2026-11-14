@@ -128,6 +128,60 @@ ipcMain.on('mkflix:api-base', (event) => {
   event.returnValue = API_BASE;
 });
 
+// ---- In-app updates (see updater.js) ----
+// The manifest URL can be pointed at a test server with MKFLIX_UPDATE_URL or
+// `updateUrl` in mkflix-config.json; otherwise it's the release server.
+const updater = require('./updater');
+function configuredUpdateUrl() {
+  if (process.env.MKFLIX_UPDATE_URL) return process.env.MKFLIX_UPDATE_URL.trim();
+  try {
+    return String(JSON.parse(readOptional('mkflix-config.json') || '{}').updateUrl || '').trim();
+  } catch (e) {
+    return '';
+  }
+}
+updater.configure(configuredUpdateUrl());
+const APP_PLATFORM = updater.platformKey() || process.platform;
+
+// Only the account gate (a local file) may drive updates, not a cinejoy.pk page.
+function fromGate(event) {
+  const url = (event.senderFrame && event.senderFrame.url) || '';
+  return url.startsWith('file://');
+}
+ipcMain.on('mkflix:app-info', (event) => {
+  event.returnValue = { version: app.getVersion(), platform: APP_PLATFORM };
+});
+ipcMain.handle('mkflix:update-check', async (event) => {
+  if (!fromGate(event)) return { status: 'none' };
+  try {
+    return await updater.check();
+  } catch (e) {
+    return { status: 'error', message: String(e.message || e) };
+  }
+});
+ipcMain.handle('mkflix:update-start', async (event) => {
+  if (!fromGate(event)) return { ok: false, message: 'Not allowed' };
+  const sender = event.sender;
+  let last = 0;
+  try {
+    const file = await updater.download((received, total) => {
+      const now = Date.now();
+      if (now - last < 150 && received !== total) return;
+      last = now;
+      if (!sender.isDestroyed()) sender.send('mkflix:update-progress', { received, total });
+    });
+    return { ok: true, ...(await updater.install(file)) };
+  } catch (e) {
+    return { ok: false, message: String(e.message || e) };
+  }
+});
+ipcMain.on('mkflix:update-later', (event, version) => {
+  if (fromGate(event) && version) updater.dismiss(String(version));
+});
+ipcMain.on('mkflix:open-downloads', (event) => {
+  if (fromGate(event)) shell.openExternal(updater.downloadsPage());
+});
+
 // ---- Subscription (playback gate) ----
 // The account gate hands us the session; we check the MK-Flix backend ourselves,
 // so a page on cinejoy.pk can't fake a subscription. The enforcer injected into
@@ -145,7 +199,13 @@ function getJson(url, token) {
     } catch (e) {
       return resolve(null);
     }
-    const req = lib.get(url, { headers: { Authorization: `Bearer ${token}` }, timeout: 15000 }, (res) => {
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      // Lets the backend refuse versions older than its minimum (426).
+      'X-App-Version': app.getVersion(),
+      'X-App-Platform': APP_PLATFORM,
+    };
+    const req = lib.get(url, { headers, timeout: 15000 }, (res) => {
       let body = '';
       res.on('data', (d) => (body += d));
       res.on('end', () => {
