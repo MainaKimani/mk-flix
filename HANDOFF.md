@@ -35,6 +35,10 @@ account is required, and must never point users at cinejoy.pk.
 
 ## Latest sessions — 2026-11-13 (afternoon) and 2026-11-14
 
+- **Deployed** (2026-11-14): the backend runs on the cPanel host at
+  `https://blendyplay.mainakimani.com` (see "Deployment" below); the gate's
+  built-in API address points there (`mk-flix` `fdc07c7`). Production uses
+  SQLite because the host's PostgreSQL is 13 and Django 5.2 needs 14.
 - **In-app updates with a signed release manifest** (`mk-flix` `61481a7`): see
   "Releases and in-app updates" below. Releases will live at
   `https://blendy.mainakimani.com/downloads/` (the portal's subdomain).
@@ -102,6 +106,7 @@ blendy-play commits:
 - `74de4d8` the portal: product page, sign-in, account area, admin dashboard
 
 mk-flix commits:
+- `fdc07c7` gate's built-in backend is `https://blendyplay.mainakimani.com/api`
 - `61481a7` in-app updates from a signed release manifest; `release/publish.mjs`
 - `8c25d24` own app identity (Android id + key, desktop id/package/data folder, Windows installer)
 - `bc9ccd4` "Forgot your password?" on the gate's sign-in
@@ -122,6 +127,8 @@ mk-flix commits:
 - `7aada6f` the account gate (onboarding + M-Pesa paywall) wired into both apps
 
 mk-flix-be commits:
+- `f91ffae` the bare domain redirects to the portal
+- `c53460b` cPanel deploy: `passenger_wsgi.py`, WhiteNoise, production checks, SQLite IMMEDIATE transactions, `DEPLOY.md` (117 tests)
 - `56a6096` payment receipt email; dashboard search by receipt reference (111 tests)
 - `808c9eb` "password changed" email after a change from the account page too (107 tests)
 - `fb33082` forgot password: emailed single-use link to the portal (105 tests)
@@ -221,6 +228,41 @@ the gate (pure black, the mark's cyan/magenta/red, Ubuntu font).
 - **Deploy:** `npx ng build` → upload `dist/blendy-studio/browser` to a static
   host; replace `config.json`; send unknown paths to `index.html`; HTTPS. The
   README has nginx/Netlify/Vercel snippets.
+
+## Deployment
+
+Everything is on one cPanel account (Passenger "Setup Python App" for the
+backend). Step-by-step guide: `mk-flix-be/DEPLOY.md`.
+
+| Address | What | On the server |
+|---|---|---|
+| `https://blendyplay.mainakimani.com/api/` | backend (Python 3.13 app at the subdomain's root) | `~/blendyplay`, virtualenv `blendyplay/3.13` |
+| `https://blendyplay.mainakimani.com/admin/` | Django admin | same app |
+| `https://blendyplay.mainakimani.com/` | redirects to the portal | same app |
+| `https://blendy.mainakimani.com/` | portal (static) | the subdomain's document root |
+| `https://blendy.mainakimani.com/downloads/` | installers + signed `releases.json` | `downloads/` there |
+
+- **Server `.env`** (only on the server; a copy belongs in encrypted
+  storage): production `SECRET_KEY`, `FIELD_ENCRYPTION_KEY` (never change it),
+  `MPESA_WEBHOOK_TOKEN`; `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS` for
+  `blendyplay.mainakimani.com` (with `https://` in the CSRF one);
+  `CORS_ALLOWED_ORIGINS=https://blendy.mainakimani.com` (the portal is
+  another origin); `PORTAL_URL=https://blendy.mainakimani.com`;
+  `POSTGRES_DB` empty (SQLite); M-Pesa still on sandbox credentials.
+- **Database:** SQLite, `~/blendyplay/db.sqlite3`. SQLite ignores
+  `select_for_update()`, so transactions run in `IMMEDIATE` mode to stop the
+  callback and the reconcile job settling a payment twice. To move to
+  PostgreSQL/MySQL later: `dumpdata`, set the database in `.env`, `migrate`,
+  `loaddata`.
+- **Cron:** `reconcile_payments` every 5 minutes; a daily SQLite backup
+  (Python `sqlite3` backup API) into `~/blendyplay-backups`, keeping 14 days.
+  Commands are in `DEPLOY.md` step 7.
+- **Static files:** WhiteNoise under `/api/static/`; run `collectstatic`
+  after every backend update, then Restart on the Python App page.
+- **Errors:** `~/blendyplay/stderr.log`.
+- **Deploy package** (built locally, not in git): `~/Desktop/blendy-play-deploy/`
+  with `blendyplay-api.zip` (repo files + a production `.env`), `portal.zip`
+  (build + production `config.json`) and `DEPLOY.md`.
 
 ## Email verification
 
@@ -384,11 +426,10 @@ For local testing: `MKFLIX_API_BASE=http://localhost:8000/api npm start`.
 
 - **Email:** sending works (SPF, DKIM, DMARC pass): verification code,
   welcome, password reset, password changed and payment receipt.
-- **Deploy the portal:** production `config.json`, the portal's origin in the
-  backend's `CORS_ALLOWED_ORIGINS` and its address in `PORTAL_URL`, SPA fallback, HTTPS, and the release
-  binaries in `public/downloads/` (names in `releases.json`).
-- **Production backend:** HTTPS, Postgres, `migrate`, a superuser, scheduled
-  `reconcile_payments` (cron/systemd).
+- **Finish the deploy:** the backend is live (checked: `/api/plans`, admin
+  with its CSS, CORS for the portal). Still to do: upload `portal.zip` to
+  `blendy.mainakimani.com`, add the two cron jobs, upload the root redirect
+  (`mkflix_be/urls.py`), and run `DEPLOY.md` step 8 end to end.
 - **Go live with M-Pesa:** Safaricom approval, live keys/shortcode/passkey,
   `MPESA_BASE_URL=https://api.safaricom.co.ke`, the deployed callback, the IP
   allowlist with `MPESA_WEBHOOK_ENFORCE_IP=True`, prices restored. **Open
