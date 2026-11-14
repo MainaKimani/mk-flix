@@ -39,6 +39,12 @@ account is required, and must never point users at cinejoy.pk.
   the sender's domain (`mk-flix-be` `168431c`).
 - **Email verification with a 4-digit code** (`mk-flix-be` `b98b2c0`, gate
   `e07df8d`, portal `da7c94a`): see "Email verification" below.
+- **Payment receipt email** (`mk-flix-be` `56a6096`, portal `afd93c5`): sent from
+  `settle_payment`, so once per successful payment whether the callback or
+  reconciliation settles it; none for failed payments. Shows plan, amount,
+  paid time (EAT), masked phone, M-Pesa receipt (absent when reconciliation
+  settled it), a reference (first 8 hex digits of the payment id) and the new
+  period end. The dashboard's payment search finds payments by that reference.
 - **Forgot password** (`mk-flix-be` `fb33082`, gate `bc9ccd4`, portal
   `5a80018`): see "Forgot password" below. Tested end to end, gate → email →
   portal → sign-in with the new password.
@@ -80,6 +86,7 @@ account is required, and must never point users at cinejoy.pk.
 ## Commits (newest first)
 
 blendy-play commits:
+- `afd93c5` payment search hint mentions the receipt reference
 - `5a80018` `/forgot-password` and `/reset-password` pages; no-referrer
 - `4b79415` show/hide eye on password fields; "at least 6 characters" hint
 - `da7c94a` `/verify` page for unverified accounts; account cache refreshed after changes
@@ -105,6 +112,7 @@ mk-flix commits:
 - `7aada6f` the account gate (onboarding + M-Pesa paywall) wired into both apps
 
 mk-flix-be commits:
+- `56a6096` payment receipt email; dashboard search by receipt reference (111 tests)
 - `808c9eb` "password changed" email after a change from the account page too (107 tests)
 - `fb33082` forgot password: emailed single-use link to the portal (105 tests)
 - `8639a1b` passwords need 6 characters, not 8 (93 tests)
@@ -165,7 +173,7 @@ a cinejoy page/ad can't fake a subscription:
 - `accounts` — email-login `CustomUser` (`email_verified_at`); `EmailVerificationCode` + `accounts/verification.py` for the 4-digit code; `PasswordResetToken` + `accounts/password_reset.py` for forgot password; passwords need 6+ characters, not all numbers, not common, not like the email; CineJoy number **encrypted at rest** (Fernet, `FIELD_ENCRYPTION_KEY`); self-service profile/password/delete (`accounts/services.py` erases the person but keeps payments as anonymous records).
 - `billing` — `Plan` (seeded **Weekly**/**Monthly**), per-user `Subscription` (renewals extend it).
 - `payments` — `Payment` (with `terms_version`) + `MpesaTransaction`, STK Push, token-authenticated callback, idempotent settle, `reconcile_payments` command.
-- `notifications` — `send_email(name, to, context)`: templates in `notifications/templates/emails/<name>/` (subject, text, HTML on a shared layout), sent after commit in a background thread; failures are logged, not retried.
+- `notifications` — `send_email(name, to, context)`: templates in `notifications/templates/emails/<name>/` (subject, text, HTML on a shared layout), sent after commit in a background thread; failures are logged, not retried. Emails: `verify_email`, `welcome`, `password_reset`, `password_changed`, `payment_receipt`.
 - `dashboard` — read-only admin API (see below).
 - `CACHES` is the **database cache** (table created by a payments migration), shared by all processes; it holds the Daraja token.
 - Endpoints:
@@ -329,8 +337,8 @@ For local testing: `MKFLIX_API_BASE=http://localhost:8000/api npm start`.
 
 ## Not done yet / next steps
 
-- **Email:** sending works (SPF, DKIM, DMARC pass). Next email worth adding: a
-  payment receipt.
+- **Email:** sending works (SPF, DKIM, DMARC pass): verification code,
+  welcome, password reset, password changed and payment receipt.
 - **Deploy the portal:** production `config.json`, the portal's origin in the
   backend's `CORS_ALLOWED_ORIGINS` and its address in `PORTAL_URL`, SPA fallback, HTTPS, and the release
   binaries in `public/downloads/` (names in `releases.json`).
