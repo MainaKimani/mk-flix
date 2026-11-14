@@ -14,6 +14,12 @@
 //  4. On video pages: OK plays/pauses and left/right skip 10 s while the
 //     video itself is highlighted (or nothing is); the remote's media keys
 //     (play/pause, fast-forward, rewind) work anywhere.
+//  5. The player, like a TV app's: the film starts by itself with the
+//     site's controls, subtitles button, settings and other overlays
+//     hidden. Any remote key brings them back (that press only reveals
+//     them; the media keys also act), and they hide again after 10 s with
+//     no key pressed. Subtitle text and loading spinners hold no buttons,
+//     so they stay visible.
 // Pointer mode (an on-screen cursor, toggled with a long press on OK) is
 // handled natively in MainActivity; it takes the arrow keys before they
 // reach the page.
@@ -72,7 +78,12 @@
     var all = Array.prototype.filter.call(document.querySelectorAll(FOCUSABLE), usable);
     var usableSet = new Set(all);
     var kept = [];
+    var player = playerOn();
     return all.filter(function (el) {
+      // In the player, sliders aren't stops: left/right seek 10 s when
+      // nothing is highlighted, and a slider would trap the highlight on the
+      // way to the subtitles and settings buttons beside it.
+      if (player && el.matches('input[type="range"],[role="slider"]')) return false;
       var link = el.parentElement && el.parentElement.closest('a[href]');
       if (link && usableSet.has(link)) return false;
       if (el.tagName !== 'A' && el.tagName !== 'VIDEO') {
@@ -103,6 +114,21 @@
 
   function nearest(dir) {
     var list = candidates();
+    if ((!current || !document.contains(current)) && playerOn()) {
+      // First press in the player: down goes to the control bar at the
+      // bottom, up to the top bar (back, title), starting from the left. The
+      // video itself fills the screen, so it would always win otherwise.
+      var pickFirst = null, pickScore = Infinity;
+      list.forEach(function (el) {
+        var r = el.getBoundingClientRect();
+        if (el.tagName === 'VIDEO' || !onScreen(r)) return;
+        // Rows by 40px bands, so a slider a few pixels taller than the
+        // buttons beside it doesn't jump the queue.
+        var s = (dir === 'up' ? Math.round(r.top / 40) : -Math.round(r.bottom / 40)) * 10000 + r.left;
+        if (s < pickScore) { pickScore = s; pickFirst = el; }
+      });
+      if (pickFirst || dir === 'up' || dir === 'down') return pickFirst;
+    }
     if (!current || !document.contains(current)) {
       // First press: a visible Play button if there is one (like a TV app's
       // hero), otherwise the item closest to the top-left of the screen.
@@ -194,13 +220,124 @@
   function togglePlay(v) { if (v.paused) { var p = v.play(); if (p && p.catch) p.catch(function () {}); } else { v.pause(); } }
   function skip(v, s) { if (isFinite(v.duration)) v.currentTime = Math.max(0, Math.min(v.duration, v.currentTime + s)); }
 
+  // --- 5. Player: starts by itself, controls hide ---------------------------
+  var HIDE_AFTER_MS = 10000;
+  var INTERACTIVE = 'button,[role="button"],[role="slider"],[role="menuitem"],input,select,a[href]';
+  // Subtitle text has to stay on screen even while the controls are hidden.
+  var CAPTION = '[class*="caption" i],[class*="subtitle" i],[class*="cue" i],[id*="caption" i],[id*="subtitle" i]';
+  var root = document.documentElement;
+  var chromeStyle = document.createElement('style');
+  chromeStyle.id = 'mkflix-tv-player-style';
+  chromeStyle.textContent =
+    '[data-mkf-chrome]{transition:opacity .25s ease-out!important;}' +
+    'html.mkf-chrome-hidden [data-mkf-chrome]{opacity:0!important;pointer-events:none!important;}';
+  (document.head || document.documentElement).appendChild(chromeStyle);
+  var hideTimer = null;
+  var startedFor = null;   // the <video> we've already started
+
+  function playerOn() { return onWatchPage() && !!video(); }
+
+  function overlaps(a, b) {
+    return a.width > 0 && a.height > 0 && a.right > b.left && a.left < b.right && a.bottom > b.top && a.top < b.bottom;
+  }
+
+  // The player's overlays are whatever is drawn over the video and holds a
+  // control: the bottom bar, the title and back button on top, the big play
+  // button, the subtitle and settings menus. They're found by position, not
+  // by the site's class names, which change from one release to the next. A
+  // layer that also holds the subtitle text is split into its parts, so only
+  // the controls in it hide.
+  function markChrome() {
+    var v = video();
+    if (!v) return;
+    var vr = v.getBoundingClientRect();
+    function mark(el) {
+      if (el.hasAttribute('data-mkf-chrome') || /^(STYLE|SCRIPT|LINK|META)$/.test(el.tagName)) return;
+      if (!overlaps(el.getBoundingClientRect(), vr)) return;
+      if (!(el.matches(INTERACTIVE) || el.querySelector(INTERACTIVE))) return;
+      if (el.matches(CAPTION)) return;
+      if (el.querySelector(CAPTION)) {
+        Array.prototype.forEach.call(el.children, mark);
+        return;
+      }
+      el.setAttribute('data-mkf-chrome', '');
+    }
+    for (var node = v; node && node.parentElement; node = node.parentElement) {
+      Array.prototype.forEach.call(node.parentElement.children, function (sib) {
+        if (sib !== node && !sib.contains(v)) mark(sib);
+      });
+    }
+  }
+
+  function hideChrome() {
+    clearTimeout(hideTimer);
+    if (!playerOn()) return;
+    markChrome();
+    root.classList.add('mkf-chrome-hidden');
+    // A highlight on a control that's now invisible would leave OK pressing
+    // it blind; with nothing highlighted, OK and left/right drive the video.
+    if (current && current.closest('[data-mkf-chrome]')) {
+      current.classList.remove('mkf-focus');
+      current = null;
+    }
+  }
+
+  function showChrome() {
+    root.classList.remove('mkf-chrome-hidden');
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(hideChrome, HIDE_AFTER_MS);
+  }
+
+  // Start the film as soon as its <video> can play, the way the phone and
+  // desktop apps do, instead of waiting for another OK. If the page refuses a
+  // scripted play(), its own big play button in the middle gets a click.
+  function autostart() {
+    var v = video();
+    if (!v || !onWatchPage() || startedFor === v) return;
+    startedFor = v;
+    var tries = 0, started = false;
+    function attempt() {
+      if (started || startedFor !== v || !document.contains(v) || !onWatchPage()) return;
+      if (!v.paused) { started = true; hideChrome(); return; }
+      var p = v.play();
+      if (p && p.catch) p.catch(function () {
+        var r = v.getBoundingClientRect();
+        var hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        var btn = hit && hit !== v && hit.closest(INTERACTIVE);
+        if (btn) btn.click();
+      });
+      if (++tries < 30) setTimeout(attempt, 1000);
+    }
+    v.addEventListener('playing', function onPlaying() {
+      v.removeEventListener('playing', onPlaying);
+      if (!started) { started = true; hideChrome(); }
+    });
+    attempt();
+  }
+
   var ARROWS = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
+  // Fields where left/right move the text cursor rather than the highlight.
+  var TEXT_INPUT = /^(text|search|email|password|number|tel|url)$/i;
+  var MEDIA_KEYS = /^Media(PlayPause|Play|Pause|FastForward|Rewind|TrackNext|TrackPrevious)$/;
 
   document.addEventListener('keydown', function (e) {
     var key = e.key;
     var active = document.activeElement;
-    var typing = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable);
+    var typing = active && ((active.tagName === 'INPUT' && TEXT_INPUT.test(active.type || 'text'))
+      || active.tagName === 'TEXTAREA' || active.isContentEditable);
     var v = video();
+
+    // 5. With the controls hidden, a key first brings them back. Only the
+    // media keys also do their job; an OK or arrow press just reveals, so a
+    // viewer can see what they're about to press.
+    if (playerOn()) {
+      var hidden = root.classList.contains('mkf-chrome-hidden');
+      showChrome();
+      if (hidden && !MEDIA_KEYS.test(key)) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        return;
+      }
+    }
 
     // Remote media keys, anywhere a video exists.
     if (v && (key === 'MediaPlayPause' || key === 'MediaPlay' || key === 'MediaPause')) {
@@ -253,6 +390,17 @@
   setInterval(rememberPlace, 500);
   new MutationObserver(function () {
     setViewport();
+    // The player builds itself after the page shows, and the site moves
+    // between pages without reloading: start a new film, mark controls that
+    // just appeared (they take the current shown/hidden state), and drop the
+    // hidden state when leaving the player.
+    if (playerOn()) {
+      autostart();
+      if (root.classList.contains('mkf-chrome-hidden')) markChrome();
+    } else if (root.classList.contains('mkf-chrome-hidden')) {
+      root.classList.remove('mkf-chrome-hidden');
+      clearTimeout(hideTimer);
+    }
     if (current && !document.contains(current)) {
       current = null;
       if (!lastCentre) return;
