@@ -4,9 +4,11 @@ Snapshot for picking the project back up in a fresh Claude Code session (e.g. on
 a different Claude subscription or machine). Everything described here is already
 committed and pushed; this file is the map.
 
-The product is called **Blendy Play** in everything users see. The code,
-repos, package ids and storage keys keep the old name **MK-Flix** on purpose
-(see "The rename" below).
+The product is called **Blendy Play**. Since 2026-11-14 it is also a
+**separate app identity** from the old MK-Flix (new Android application id
+and signing key, new desktop app id, Linux package and data folder), so it
+installs alongside MK-Flix. The code, repo names, the `MKFlixNative` bridge and
+`mkflix_*` storage keys keep the old name (see "The rename").
 
 ## Repos
 
@@ -33,6 +35,12 @@ account is required, and must never point users at cinejoy.pk.
 
 ## Latest sessions — 2026-11-13 (afternoon) and 2026-11-14
 
+- **In-app updates with a signed release manifest** (`mk-flix` `61481a7`): see
+  "Releases and in-app updates" below. Releases will live at
+  `https://blendy.mainakimani.com/downloads/` (the portal's subdomain).
+- **New app identity** (`mk-flix` `8c25d24`): Android `com.mainakimani.blendyplay` with a new
+  release key; desktop app id `com.mainakimani.blendyplay`, Linux package
+  `blendy-play`, own data folder; Windows is now an installer, not a zip.
 - **Email works for real.** The cPanel mailbox `blendyplay@mainakimani.com`
   sends through `mail.mainakimani.com` (port 465, SSL); test emails to Gmail
   pass SPF, DKIM and DMARC (`_dmarc` record added 2026-11-14). Message-IDs use
@@ -94,6 +102,8 @@ blendy-play commits:
 - `74de4d8` the portal: product page, sign-in, account area, admin dashboard
 
 mk-flix commits:
+- `61481a7` in-app updates from a signed release manifest; `release/publish.mjs`
+- `8c25d24` own app identity (Android id + key, desktop id/package/data folder, Windows installer)
 - `bc9ccd4` "Forgot your password?" on the gate's sign-in
 - `90f5da5` show/hide eye on the password field; "at least 6 characters" hint when registering
 - `e07df8d` "Check your email" code screen after registering
@@ -277,17 +287,52 @@ the gate (pure black, the mark's cyan/magenta/red, Ubuntu font).
 - **Privacy:** CineJoy numbers are never returned, only whether one is saved.
   Read-only for now: no refunds, manual extensions or account actions yet.
 
+## Releases and in-app updates
+
+- **Where:** `https://blendy.mainakimani.com/downloads/` holds `releases.json`
+  (the manifest), `releases.json.sig` (ECDSA P-256 signature) and one folder
+  per version with the APK, `Blendy-Play-Setup-<v>.exe` and
+  `Blendy-Play_<v>_amd64.deb`. The portal's download section reads the same
+  manifest.
+- **Trust:** the apps accept a manifest only if its signature verifies
+  against the public key built into them (`release/manifest-public-key.pem`,
+  `updater.js`, `AppUpdater.java`); downloads must match the manifest's
+  SHA-256; Android also checks package name, newer versionCode and the same
+  signing certificate. Plain http only for `localhost` testing.
+- **Gate:** at launch (at most 6 s, once per app start) it asks the native side
+  for the update state: **Update available** (Update now / Later; Later hides
+  it for 24 h) or **Update required** (version below the manifest's
+  `minimum_version`; no way past). Windows downloads, runs the installer
+  silently and restarts; Linux downloads and opens the .deb in the software
+  installer; Android downloads and opens Android's installer (first asking to
+  allow installs from Blendy Play).
+- **Backend safety net:** apps send `X-App-Version` / `X-App-Platform`;
+  `MIN_APP_VERSION_ANDROID/_WINDOWS/_LINUX` in `mk-flix-be/.env` make the API
+  answer 426 `update_required` below them, and the gate shows Update required.
+- **Releasing:** `release/README.md` — bump versions, build, run
+  `node release/publish.mjs --notes "…" [--min x.y.z]`, upload the version
+  folder first and the manifest last.
+- **Keys (back up both, never replace):** manifest signing key
+  `~/.config/blendy-release/manifest-signing-key.pem`; Android keystore
+  `~/keys/blendy-play-release.jks` (password in `~/.gradle/gradle.properties`,
+  `BLENDY_RELEASE_*`). The old MK-Flix keystore `~/keys/mkflix-release.jks`
+  stays for reference only.
+- **Windows build needs Wine** on this Linux machine (`sudo apt install wine`):
+  electron-builder's NSIS target runs Windows tools.
+- **Not yet tested on a device:** the Android install step (no phone/TV was
+  connected) and the Windows installer (no Wine yet). Manifest signing,
+  verification (Node and Java), downloads, tamper checks and the gate screens
+  are tested.
+
 ## The rename
 
-User-visible text says **Blendy Play**: Android app name, desktop window title,
+User-visible text says **Blendy Play** everywhere: app names, window title,
 splash and wordmarks (`branding/make-icons.py` `NAME`), gate, error page, site
-footer, Linux menu entry, Windows zip/folder/exe (`Blendy-Play-Windows-x64.zip`,
-`Blendy Play.exe`), `.deb` file name. Kept on purpose:
-- Android package id and the deb package name `mk-flix`, so updates install over
-  existing installs.
-- Electron `userData` is pinned to the old `MK-Flix` folder in `main.js`, so the
-  rename doesn't sign desktop users out.
-- The `MKFlixNative` bridge, `mkflix_*` storage keys, file names and repo names.
+footer, Linux menu entry and package files. Since the identity change, the
+Android application id (`com.mainakimani.blendyplay`), signing key, desktop
+app id, Linux package (`blendy-play`) and desktop data folder are new too.
+Kept on purpose: the Java package / `namespace` `com.w2a.um1c`, the
+`MKFlixNative` bridge, `mkflix_*` storage keys, file names and repo names.
 - The main `README.md` still describes the v1.4.0 release as MK-Flix; it changes
   with the release that ships the rename.
 
@@ -350,9 +395,12 @@ For local testing: `MKFLIX_API_BASE=http://localhost:8000/api npm start`.
   question — Paybill or Till?** STK is hard-coded as `CustomerPayBillOnline`
   with `PartyB` = shortcode; a Till needs `CustomerBuyGoodsOnline` and separate
   settings in `payments/services/providers/mpesa.py`.
-- **Release:** bump versions from 1.4.0 (`mk-flix-app/app/build.gradle.kts`,
-  `mk-flix-desktop/package.json`), rename the main README, build the APK, zip
-  and deb, publish them through the portal's downloads.
+- **First Blendy Play release:** install Wine, follow `release/README.md`
+  (bump to 1.5.0 / versionCode 150), set up the subdomain with HTTPS, upload,
+  and rename the main README. Existing MK-Flix users install Blendy Play once
+  by hand (it's a separate app); from then on it updates itself.
+- **Test updates on real devices:** an Android phone/TV (install prompt,
+  "allow installs" step) and Windows (silent install + restart).
 - **Confirm in the running apps:** the gate routing (`326f978`) and the terms
   checkbox.
 - **Sandbox cancel test:** decline the STK prompt → payment FAILED, no subscription.
