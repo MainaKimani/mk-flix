@@ -1,5 +1,5 @@
 #!/bin/bash
-# build-apk.sh — manual APK build for MK-Flix (for machines without Gradle;
+# build-apk.sh — manual debug APK build for Blendy Play (for machines without Gradle;
 # so this drives the official SDK build-tools directly: aapt2 -> javac -> d8 -> zipalign -> apksigner)
 #
 # Paths can be overridden: ANDROID_HOME (SDK), JAVA_HOME (JDK 17+).
@@ -29,7 +29,9 @@ fi
 echo "==> $PACKAGE $VERSION_NAME ($VERSION_CODE)"
 
 SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/android-sdk}}"
-BT="$SDK/build-tools/34.0.0"
+# BUILD_TOOLS_VERSION picks another installed build-tools (e.g. 36.0.0 where
+# 34's d8 can't read the JDK's class files).
+BT="$SDK/build-tools/${BUILD_TOOLS_VERSION:-34.0.0}"
 PLATFORM="$SDK/platforms/android-34/android.jar"
 export JAVA_HOME="${JAVA_HOME:-$HOME/jdk}"
 export PATH="$JAVA_HOME/bin:$PATH"

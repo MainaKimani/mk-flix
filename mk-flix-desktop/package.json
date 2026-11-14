@@ -1,26 +1,25 @@
 {
-  "name": "mk-flix-desktop",
+  "name": "blendy-play",
   "productName": "Blendy Play",
   "version": "1.4.0",
-  "description": "Blendy Play desktop app for Windows and Linux, powered by CineJoy: watch cinejoy.pk on the big screen",
+  "description": "Blendy Play desktop app for Windows and Linux: ad-free watching on the big screen",
   "author": {
     "name": "Blendy Studio",
     "email": "alexroymauk@gmail.com"
   },
   "homepage": "https://github.com/MainaKimani/mk-flix",
-  "desktopName": "mk-flix.desktop",
+  "desktopName": "blendy-play.desktop",
   "main": "main.js",
   "engines": {
     "node": ">=22.12.0"
   },
   "scripts": {
     "start": "electron .",
-    "package-win": "electron-packager . 'Blendy Play' --platform=win32 --arch=x64 --icon=icon.ico --ignore='^/(how-to-install\\.txt|build-win\\.sh|README\\.md|\\.nvmrc|node_modules)($|/)' --win32metadata.CompanyName='Blendy Studio' --app-copyright='Copyright (C) 2026 Blendy Studio' --overwrite --out=dist",
-    "dist-win": "./build-win.sh",
+    "dist-win": "electron-builder --win nsis --x64",
     "dist-linux": "electron-builder --linux deb"
   },
   "build": {
-    "appId": "com.mkflix.desktop",
+    "appId": "com.mainakimani.blendyplay",
     "files": [
       "main.js",
       "preload.js",
@@ -45,7 +44,7 @@
       "target": [
         "deb"
       ],
-      "executableName": "mk-flix",
+      "executableName": "blendy-play",
       "icon": "icon.png",
       "category": "AudioVideo",
       "synopsis": "Blendy Play: Powered by CineJoy",
@@ -60,11 +59,31 @@
       "syncDesktopName": true
     },
     "deb": {
-      "packageName": "mk-flix"
+      "packageName": "blendy-play"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "runAfterFinish": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Blendy Play",
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "Blendy-Play-Setup-${version}.${ext}"
     }
   },
   "devDependencies": {
-    "@electron/packager": "^20.3.0",
     "electron": "^45.3.0",
     "electron-builder": "^26.18.0"
   }

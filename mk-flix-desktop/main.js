@@ -2,11 +2,6 @@ const { app, BrowserWindow, WebContentsView, ipcMain, session, shell } = require
 const path = require('path');
 const fs = require('fs');
 
-// Electron names the folder holding the user's session, cookies and settings
-// after productName. The app shipped as "MK-Flix", so keep that folder after
-// the rename to Blendy Play: moving it would sign every user out.
-app.setPath('userData', path.join(app.getPath('appData'), 'MK-Flix'));
-
 const HOME_URL = 'https://cinejoy.pk/';
 const APP_TITLE = 'Blendy Play: Powered by CineJoy';
 

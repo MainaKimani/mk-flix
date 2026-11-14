@@ -1,10 +1,13 @@
-# 🎬 MK-Flix — Android app
+# 🎬 Blendy Play — Android app
 
 Android client for [cinejoy.pk](https://cinejoy.pk/): a fullscreen WebView
-with ad blocking, MK-Flix branding and a proper error screen.
+with ad blocking, Blendy Play branding and a proper error screen.
 
-- Package: `com.w2a.um1c` (kept from CineJoy; changing it would make Android
-  treat MK-Flix as a different app)
+- Application id: `com.mainakimani.blendyplay`, signed with the Blendy Play
+  release key. It's a different app from MK-Flix (`com.w2a.um1c`, the old
+  key), so it installs alongside it. Neither the id nor the key may change
+  again, or updates stop installing. The Java package and `namespace` stay
+  `com.w2a.um1c`; that's only the code's name.
 - Version: 1.4.0 (versionCode 140), set in `app/build.gradle.kts`
 - Android 7.0 (API 24) and newer; targets and compiles against API 34
 
@@ -127,15 +130,15 @@ Gradle. It reads the package name and version from `app/build.gradle.kts`.
 
 ### Signed release builds
 
-`assembleRelease` signs with the release key named by these Gradle
-properties, normally in `~/.gradle/gradle.properties` on the machine that
-publishes releases:
+`assembleRelease` signs with the release key named by these Gradle properties,
+normally in `~/.gradle/gradle.properties` on the machine that publishes
+releases:
 
 ```properties
-MKFLIX_RELEASE_STORE_FILE=/path/to/mkflix-release.jks
-MKFLIX_RELEASE_STORE_PASSWORD=...
-MKFLIX_RELEASE_KEY_ALIAS=mkflix
-MKFLIX_RELEASE_KEY_PASSWORD=...
+BLENDY_RELEASE_STORE_FILE=/path/to/blendy-play-release.jks
+BLENDY_RELEASE_STORE_PASSWORD=...
+BLENDY_RELEASE_KEY_ALIAS=blendyplay
+BLENDY_RELEASE_KEY_PASSWORD=...
 ```
 
 The key never goes in this repo. Without these properties a release build
