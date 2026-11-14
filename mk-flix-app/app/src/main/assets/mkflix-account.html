@@ -159,7 +159,21 @@
       <p class="hint" id="password-hint">At least 6 characters, and not all numbers.</p>
       <div class="err" id="auth-err"></div>
       <button id="auth-submit">Continue</button>
+      <a class="link hidden" id="auth-forgot">Forgot your password?</a>
       <a class="link" id="auth-toggle">Have an account? Sign in</a>
+    </section>
+
+    <!-- forgot password: the reset itself happens on the Blendy Play website -->
+    <section data-view="forgot" class="hidden">
+      <h1>Reset your password</h1>
+      <p class="sub">Enter the email you signed up with. We'll send you a link to choose a new
+        password on the Blendy Play website.</p>
+      <label for="forgot-email">Email</label>
+      <input id="forgot-email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com">
+      <div class="err" id="forgot-err" role="alert"></div>
+      <div class="ok-note" id="forgot-ok" role="status"></div>
+      <button id="forgot-submit">Send reset link</button>
+      <a class="link" id="forgot-back">Back to sign in</a>
     </section>
 
     <!-- confirm the email address with the 4-digit code sent after registering -->
@@ -644,8 +658,9 @@
       ? "Have an account? Sign in" : "New here? Create an account";
     document.getElementById("auth-submit").textContent = mode === "register" ? "Create account" : "Sign in";
     document.getElementById("password").setAttribute("autocomplete", mode === "register" ? "new-password" : "current-password");
-    // The length rule only matters when choosing a password.
+    // The length rule only matters when choosing a password; "forgot" only when signing in.
     document.getElementById("password-hint").classList.toggle("hidden", mode !== "register");
+    document.getElementById("auth-forgot").classList.toggle("hidden", mode === "register");
     setPasswordVisible(document.querySelector('.pw-toggle[data-for="password"]'), false);
     document.getElementById("auth-err").textContent = "";
     show("auth");
@@ -831,6 +846,36 @@
 
   function logout() { clearTokens(); show("welcome"); }
 
+  // --- Forgot password -------------------------------------------------------
+  // The backend emails a link to the Blendy Play website, where the new
+  // password is set. Its answer is the same whether or not the email has an
+  // account, so this screen never says which.
+  function openForgot() {
+    var typed = document.getElementById("email").value.trim();
+    var input = document.getElementById("forgot-email");
+    if (typed) input.value = typed;
+    document.getElementById("forgot-err").textContent = "";
+    document.getElementById("forgot-ok").textContent = "";
+    document.getElementById("forgot-submit").disabled = false;
+    show("forgot");
+  }
+
+  function submitForgot() {
+    var email = document.getElementById("forgot-email").value.trim();
+    var err = document.getElementById("forgot-err");
+    var ok = document.getElementById("forgot-ok");
+    var btn = document.getElementById("forgot-submit");
+    err.textContent = "";
+    ok.textContent = "";
+    if (!email) { err.textContent = "Enter your email."; return; }
+    btn.disabled = true;
+    request("/auth/password-reset", { method: "POST", body: { email: email } }).then(function (r) {
+      btn.disabled = false;
+      if (r.ok) ok.textContent = (r.data && r.data.detail) || "Check your email for a reset link.";
+      else err.textContent = firstError(r.data) || "Enter a valid email.";
+    }).catch(function () { btn.disabled = false; err.textContent = "Can't reach Blendy Play. Check your connection."; });
+  }
+
   // Show or hide a password field's text; the eye gets a slash while shown.
   function setPasswordVisible(btn, visible) {
     var input = document.getElementById(btn.getAttribute("data-for"));
@@ -866,6 +911,10 @@
       try { document.getElementById(btn.getAttribute("data-for")).focus(); } catch (e) {}
     });
   });
+  document.getElementById("auth-forgot").addEventListener("click", openForgot);
+  document.getElementById("forgot-submit").addEventListener("click", submitForgot);
+  document.getElementById("forgot-email").addEventListener("keydown", function (e) { if (e.key === "Enter") submitForgot(); });
+  document.getElementById("forgot-back").addEventListener("click", function () { openAuth("login"); });
   document.getElementById("verify-btn").addEventListener("click", submitCode);
   document.getElementById("verify-resend").addEventListener("click", resendCode);
   document.getElementById("verify-logout").addEventListener("click", logout);
