@@ -338,14 +338,14 @@
   "use strict";
 
   // --- Configuration -------------------------------------------------------
-  // The backend URL is set by the app, not here: it reads it from a config the
-  // operator controls (desktop: the MKFLIX_API_BASE env var or mkflix-config.json;
-  // Android: assets/mkflix-config.json) and hands it over as window.MKFlixNative
-  // .getApiBase(). This constant is only a last-resort fallback. During testing
-  // you can override everything from the page console:
+  // The production backend. Release builds ship with an empty apiBase in
+  // mkflix-config.json, so this is what they use. For testing, the app can
+  // point elsewhere (desktop: the MKFLIX_API_BASE env var or mkflix-config.json;
+  // Android: assets/mkflix-config.json), handed over as window.MKFlixNative
+  // .getApiBase(); or from the page console:
   //   localStorage.setItem('mkflixApiBase', 'http://10.0.2.2:8000/api'); location.reload();
   // (Android emulator reaches the host machine at 10.0.2.2; desktop uses 127.0.0.1.)
-  var DEFAULT_API_BASE = "https://api.mk-flix.example/api";
+  var DEFAULT_API_BASE = "https://blendyplay.mainakimani.com/api";
   var CINEJOY_URL = "https://cinejoy.pk/";
   // Which wording of the Terms the user accepts when they tick the box; sent
   // with each payment. Bump it whenever the terms text below changes.
