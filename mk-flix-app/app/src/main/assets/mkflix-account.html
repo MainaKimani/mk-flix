@@ -98,6 +98,12 @@
   .terms th, .terms td { border: 1px solid var(--line); padding: 5px 10px; text-align: left; }
   .terms strong { color: var(--text); }
   .terms:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+  .code-input { text-align: center; font-size: 30px; font-weight: 700; letter-spacing: 0.6em;
+    padding: 14px 0 14px 0.6em; font-variant-numeric: tabular-nums; }
+  .sent-to { color: var(--text); font-weight: 600; word-break: break-all; }
+  .link.wait { color: var(--muted); cursor: default; }
+  .ok-note { color: #7ee2b8; font-size: 13px; margin-top: 12px; text-align: center; min-height: 18px; }
+  .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .hidden { display: none; }
   @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
 </style>
@@ -139,6 +145,21 @@
       <div class="err" id="auth-err"></div>
       <button id="auth-submit">Continue</button>
       <a class="link" id="auth-toggle">Have an account? Sign in</a>
+    </section>
+
+    <!-- confirm the email address with the 4-digit code sent after registering -->
+    <section data-view="verify" class="hidden">
+      <h1>Check your email</h1>
+      <p class="sub">We sent a 4-digit code to <span class="sent-to" id="verify-email">your email</span>.
+        Enter it to finish setting up your account.</p>
+      <label for="code" class="visually-hidden">4-digit code</label>
+      <input id="code" class="code-input" type="text" inputmode="numeric" autocomplete="one-time-code"
+             maxlength="4" pattern="[0-9]*" placeholder="····" aria-describedby="verify-err">
+      <div class="err" id="verify-err" role="alert"></div>
+      <button id="verify-btn">Verify email</button>
+      <div class="ok-note" id="verify-ok" role="status"></div>
+      <a class="link" id="verify-resend">Send a new code</a>
+      <a class="link" id="verify-logout">Use a different email</a>
     </section>
 
     <!-- paywall -->
@@ -446,12 +467,98 @@
         } else {
           showPaywall(inactiveNotice(sub));
         }
+      } else if (r.status === 403 && r.data && r.data.code === "email_not_verified") {
+        showVerify();
       } else if (r.status === 401) {
         clearTokens(); show("welcome");
       } else {
         show("retry");
       }
     }).catch(function () { show("retry"); });
+  }
+
+  // --- Email verification ----------------------------------------------------
+  // New accounts confirm their email with the 4-digit code the backend sends
+  // at registration. Until then the backend answers "email_not_verified" to
+  // the subscription check and to payments, which lands here.
+  var resendTimer = null;
+  var justRegistered = false;
+
+  function showVerify() {
+    var input = document.getElementById("code");
+    input.value = "";
+    document.getElementById("verify-err").textContent = "";
+    document.getElementById("verify-ok").textContent = "";
+    document.getElementById("verify-btn").disabled = false;
+    // Right after registering the backend has just sent a code, so the resend
+    // link waits out the same minute the backend enforces.
+    if (justRegistered) { justRegistered = false; startResendWait(60); } else { startResendWait(0); }
+    show("verify");
+    authed("/auth/me").then(function (r) {
+      if (r.ok && r.data && r.data.email) document.getElementById("verify-email").textContent = r.data.email;
+    }).catch(function () {});
+  }
+
+  function submitCode() {
+    var input = document.getElementById("code");
+    var code = input.value.replace(/\D/g, "");
+    var err = document.getElementById("verify-err");
+    var btn = document.getElementById("verify-btn");
+    err.textContent = "";
+    document.getElementById("verify-ok").textContent = "";
+    if (code.length !== 4) { err.textContent = "Enter the 4-digit code from your email."; return; }
+    btn.disabled = true;
+    authed("/auth/verify-email", { method: "POST", body: { code: code } }).then(function (r) {
+      btn.disabled = false;
+      if (r.ok) { checkAccess("launch"); return; }
+      err.textContent = (r.data && r.data.detail) || firstError(r.data) || "That code didn't work. Try again.";
+      input.value = "";
+      try { input.focus(); } catch (e) {}
+    }).catch(function () { btn.disabled = false; err.textContent = "Can't reach Blendy Play. Check your connection."; });
+  }
+
+  function resendCode() {
+    var link = document.getElementById("verify-resend");
+    if (link.classList.contains("wait")) return;
+    var err = document.getElementById("verify-err");
+    var ok = document.getElementById("verify-ok");
+    err.textContent = "";
+    ok.textContent = "";
+    link.classList.add("wait");
+    authed("/auth/verify-email/resend", { method: "POST" }).then(function (r) {
+      if (r.ok) {
+        ok.textContent = (r.data && r.data.detail) || "We sent you a new code.";
+        document.getElementById("code").value = "";
+        startResendWait((r.data && r.data.retry_after) || 60);
+      } else {
+        err.textContent = (r.data && r.data.detail) || "Couldn't send a new code.";
+        startResendWait((r.data && r.data.retry_after) || 0);
+      }
+    }).catch(function () {
+      err.textContent = "Can't reach Blendy Play. Check your connection.";
+      startResendWait(0);
+    });
+  }
+
+  // "Send a new code" is disabled, with a countdown, for `seconds`.
+  function startResendWait(seconds) {
+    var link = document.getElementById("verify-resend");
+    clearInterval(resendTimer);
+    var left = Math.ceil(seconds);
+    function tick() {
+      if (left <= 0) {
+        clearInterval(resendTimer);
+        link.classList.remove("wait");
+        link.textContent = "Send a new code";
+        return;
+      }
+      link.classList.add("wait");
+      var m = Math.floor(left / 60), s = left % 60;
+      link.textContent = "Send a new code in " + m + ":" + (s < 10 ? "0" : "") + s;
+      left -= 1;
+    }
+    tick();
+    if (left > 0) resendTimer = setInterval(tick, 1000);
   }
 
   // Why there's no active subscription, for the note on the paywall.
@@ -540,6 +647,7 @@
       if (r.ok) {
         var tokens = r.data.tokens || r.data; // register wraps tokens; login is flat
         setTokens(tokens.access, tokens.refresh);
+        justRegistered = authMode === "register";
         checkAccess("launch");
       } else {
         err.textContent = firstError(r.data) || "That didn't work. Please try again.";
@@ -705,6 +813,7 @@
 
   function logout() { clearTokens(); show("welcome"); }
 
+
   // --- Wiring --------------------------------------------------------------
   document.addEventListener("click", function (e) {
     var go = e.target.getAttribute && e.target.getAttribute("data-go");
@@ -725,6 +834,15 @@
   document.getElementById("cj-save").addEventListener("click", saveCinejoy);
   document.getElementById("cj-back").addEventListener("click", backFromCinejoy);
   document.getElementById("logout-1").addEventListener("click", logout);
+  document.getElementById("verify-btn").addEventListener("click", submitCode);
+  document.getElementById("verify-resend").addEventListener("click", resendCode);
+  document.getElementById("verify-logout").addEventListener("click", logout);
+  document.getElementById("code").addEventListener("input", function (e) {
+    var digits = e.target.value.replace(/\D/g, "").slice(0, 4);
+    if (digits !== e.target.value) e.target.value = digits;
+    if (digits.length === 4) submitCode();
+  });
+  document.getElementById("code").addEventListener("keydown", function (e) { if (e.key === "Enter") submitCode(); });
   document.getElementById("terms-ok").addEventListener("change", updatePayButton);
   document.getElementById("terms-link").addEventListener("click", function (e) { e.preventDefault(); openTerms("plans"); });
   document.getElementById("terms-agree").addEventListener("click", function () { closeTerms(true); });
