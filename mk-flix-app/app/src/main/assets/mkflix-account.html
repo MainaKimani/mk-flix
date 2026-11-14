@@ -30,9 +30,13 @@
     color-scheme: dark;
   }
   * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+  html, body { margin: 0; background: var(--bg); color: var(--text);
     font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif; }
-  body { display: flex; align-items: center; justify-content: center; padding: 24px 16px; }
+  html { height: 100%; }
+  /* min-height, not height: a card taller than the window makes the page grow
+     and scroll. With a fixed height, centring pushed the card's top above the
+     page, where it couldn't be scrolled to (short TV screens, small windows). */
+  body { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 24px 16px; }
   .card { width: 100%; max-width: 420px; background: var(--card);
     border: 1px solid var(--line); border-radius: 18px; padding: 28px 24px;
     box-shadow: 0 20px 60px rgba(0,0,0,0.6); }
