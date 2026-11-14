@@ -39,6 +39,9 @@ account is required, and must never point users at cinejoy.pk.
   the sender's domain (`mk-flix-be` `168431c`).
 - **Email verification with a 4-digit code** (`mk-flix-be` `b98b2c0`, gate
   `e07df8d`, portal `da7c94a`): see "Email verification" below.
+- **Forgot password** (`mk-flix-be` `fb33082`, gate `bc9ccd4`, portal
+  `5a80018`): see "Forgot password" below. Tested end to end, gate → email →
+  portal → sign-in with the new password.
 - **Passwords: 6 characters minimum** (`mk-flix-be` `8639a1b`) and a show/hide
   eye on every password field (gate `90f5da5`, portal `4b79415`).
 - **Web portal built** (`blendy-play`) and **admin dashboard API** added
@@ -77,12 +80,14 @@ account is required, and must never point users at cinejoy.pk.
 ## Commits (newest first)
 
 blendy-play commits:
+- `5a80018` `/forgot-password` and `/reset-password` pages; no-referrer
 - `4b79415` show/hide eye on password fields; "at least 6 characters" hint
 - `da7c94a` `/verify` page for unverified accounts; account cache refreshed after changes
 - `c842cdd` landing hero is a full-width screenshot of the app; story points as panels
 - `74de4d8` the portal: product page, sign-in, account area, admin dashboard
 
 mk-flix commits:
+- `bc9ccd4` "Forgot your password?" on the gate's sign-in
 - `90f5da5` show/hide eye on the password field; "at least 6 characters" hint when registering
 - `e07df8d` "Check your email" code screen after registering
 - `e8ebd78` gate + terms: CineJoy account is optional
@@ -100,6 +105,7 @@ mk-flix commits:
 - `7aada6f` the account gate (onboarding + M-Pesa paywall) wired into both apps
 
 mk-flix-be commits:
+- `fb33082` forgot password: emailed single-use link to the portal (105 tests)
 - `8639a1b` passwords need 6 characters, not 8 (93 tests)
 - `b98b2c0` email verification with a 4-digit code
 - `168431c` Message-ID on the sender's domain
@@ -155,14 +161,14 @@ a cinejoy page/ad can't fake a subscription:
 - Methods: `getApiBase()`, `saveSession(apiBase, access, refresh)`, `clearSession()`, `refreshSubscription()`, `isSubscribed()`, `openPaywall()`, `openSubscription()`.
 
 **Backend `mk-flix-be`** (Django 5.2 + DRF + simplejwt):
-- `accounts` — email-login `CustomUser` (`email_verified_at`); `EmailVerificationCode` + `accounts/verification.py` for the 4-digit code; passwords need 6+ characters, not all numbers, not common, not like the email; CineJoy number **encrypted at rest** (Fernet, `FIELD_ENCRYPTION_KEY`); self-service profile/password/delete (`accounts/services.py` erases the person but keeps payments as anonymous records).
+- `accounts` — email-login `CustomUser` (`email_verified_at`); `EmailVerificationCode` + `accounts/verification.py` for the 4-digit code; `PasswordResetToken` + `accounts/password_reset.py` for forgot password; passwords need 6+ characters, not all numbers, not common, not like the email; CineJoy number **encrypted at rest** (Fernet, `FIELD_ENCRYPTION_KEY`); self-service profile/password/delete (`accounts/services.py` erases the person but keeps payments as anonymous records).
 - `billing` — `Plan` (seeded **Weekly**/**Monthly**), per-user `Subscription` (renewals extend it).
 - `payments` — `Payment` (with `terms_version`) + `MpesaTransaction`, STK Push, token-authenticated callback, idempotent settle, `reconcile_payments` command.
 - `notifications` — `send_email(name, to, context)`: templates in `notifications/templates/emails/<name>/` (subject, text, HTML on a shared layout), sent after commit in a background thread; failures are logged, not retried.
 - `dashboard` — read-only admin API (see below).
 - `CACHES` is the **database cache** (table created by a payments migration), shared by all processes; it holds the Daraja token.
 - Endpoints:
-  - Auth: `POST /api/auth/{register,login,refresh}`; `POST /api/auth/verify-email` (`{code}`) and `/api/auth/verify-email/resend`; `GET/PATCH/DELETE /api/auth/me` (PATCH: name, phone; DELETE needs `{password}`; response has `is_admin`); `POST /api/auth/me/password`; `GET/PUT/DELETE /api/auth/me/cinejoy-account`.
+  - Auth: `POST /api/auth/{register,login,refresh}`; `POST /api/auth/password-reset` (`{email}`), `/password-reset/check` (`{token}`), `/password-reset/confirm` (`{token, new_password}`), all without sign-in; `POST /api/auth/verify-email` (`{code}`) and `/api/auth/verify-email/resend`; `GET/PATCH/DELETE /api/auth/me` (PATCH: name, phone; DELETE needs `{password}`; response has `is_admin`); `POST /api/auth/me/password`; `GET/PUT/DELETE /api/auth/me/cinejoy-account`.
   - Billing: `GET /api/plans`, `GET /api/me/subscription` (403 `email_not_verified` until the email is verified).
   - Payments: `POST /api/payments/mpesa/stk` (`plan_code`, `phone_number`, `terms_version`; verified accounts only), `GET /api/payments/<id>`, `GET /api/payments/mine`, `POST /api/payments/stk/callback/<token>` (also `/api/payments/mpesa/callback/<token>`).
   - Dashboard (super-admin only): `GET /api/dashboard/{overview,users,users/<id>,payments,subscriptions}`.
@@ -177,6 +183,7 @@ the gate (pure black, the mark's cyan/magenta/red, Ubuntu font).
 |---|---|---|
 | `/` | Everyone | Product page: full-width hero with a screenshot of the app, the story, "at a glance" facts, screenshots on phone/TV/desktop, downloads |
 | `/signin`, `/admin` | Everyone | One sign-in. The admin lands on `/dashboard`; anyone else on `/account` |
+| `/forgot-password`, `/reset-password` | Everyone | Ask for a reset link; the emailed link lands on `/reset-password?token=…` to set a new password |
 | `/verify` | Signed in, email not verified | Enter the 4-digit code; `/account` redirects here until it's done |
 | `/account` | Any signed-in user | Own subscription, editable details, own payments, change password, delete account |
 | `/dashboard` | Super-admin only | Overview, Users, Payments, Subscriptions |
@@ -215,7 +222,32 @@ the gate (pure black, the mark's cyan/magenta/red, Ubuntu font).
 - **Exempt:** accounts that existed before the feature (marked verified by the
   migration) and superusers.
 - **Not built yet:** changing the account email (would need the same code flow
-  to the new address) and a password-reset-by-email flow.
+  to the new address).
+
+## Forgot password
+
+- **Asking:** "Forgot your password?" on the gate's sign-in screen and the
+  portal's `/signin` (both prefill the typed email) → `POST
+  /api/auth/password-reset`. The answer is always "If an account exists for
+  that email…", so it can't be used to find out who has an account. Only
+  active accounts get the email.
+- **The link:** `<PORTAL_URL>/reset-password?token=…`. **`PORTAL_URL` is an env
+  var in `mk-flix-be/.env`** (default `http://localhost:4200`); set it to the
+  deployed portal's address. The token is 256 random bits; only its SHA-256 is
+  stored (`PasswordResetToken`, with sent-to, created, expires, used and
+  superseded times).
+- **Rules** (env-overridable): valid 60 minutes (`PASSWORD_RESET_TTL_MINUTES`),
+  single use, a newer link cancels older ones, one request a minute and 5 an
+  hour per account (`PASSWORD_RESET_RESEND_SECONDS`,
+  `PASSWORD_RESET_MAX_PER_HOUR`; extras are dropped quietly).
+- **The page:** checks the link first (`/check` returns the masked email, e.g.
+  `wa*****@example.com`) and explains invalid / expired / used / replaced links
+  with a "Send a new link" button; then new password + confirmation (eye
+  buttons, 6-character hint, mismatch caught in the browser). The token is
+  stripped from the address bar once read, and the portal sends no referrer.
+- **After a reset:** the link is used up, the email counts as verified, and a
+  "Your password was changed" email goes out. Other signed-in sessions are not
+  ended (stateless JWTs) until their tokens expire.
 
 ## Admin dashboard
 
@@ -295,12 +327,11 @@ For local testing: `MKFLIX_API_BASE=http://localhost:8000/api npm start`.
 
 ## Not done yet / next steps
 
-- **Email:** sending works. In the `_dmarc` record, remove the trailing dot
-  cPanel added after `.com` in the `rua=` address, or DMARC reports may not
-  arrive. Next emails: payment receipt, password changed, password reset
-  ("forgot password" doesn't exist yet).
+- **Email:** sending works (SPF, DKIM, DMARC pass). Next emails worth adding: a
+  payment receipt, and "password changed" after a change from `/account`
+  (it's only sent after a reset today).
 - **Deploy the portal:** production `config.json`, the portal's origin in the
-  backend's `CORS_ALLOWED_ORIGINS`, SPA fallback, HTTPS, and the release
+  backend's `CORS_ALLOWED_ORIGINS` and its address in `PORTAL_URL`, SPA fallback, HTTPS, and the release
   binaries in `public/downloads/` (names in `releases.json`).
 - **Production backend:** HTTPS, Postgres, `migrate`, a superuser, scheduled
   `reconcile_payments` (cron/systemd).
@@ -318,7 +349,7 @@ For local testing: `MKFLIX_API_BASE=http://localhost:8000/api npm start`.
 - **Sandbox cancel test:** decline the STK prompt → payment FAILED, no subscription.
 - **Terms:** lawyer review before relying on them.
 - **Customer email change** isn't possible yet (needs the code flow sent to the new address).
-- **Confirm in the running apps:** registering → code screen → paywall, on Android and desktop (tested against the real page and backend, not yet in the installed apps).
+- **Confirm on Android:** registering → code screen → paywall, and "Forgot your password?" (both confirmed on desktop).
 - **Confirm `mk-flix-be` is private.**
 
 ## Caveats worth re-reading
@@ -329,5 +360,5 @@ For local testing: `MKFLIX_API_BASE=http://localhost:8000/api npm start`.
 
 ## Where the raw session lives
 
-- Local transcripts (this machine), in `~/.claude/projects/-home-mk-dev-mk-flix/`: `01f7c073-67e5-47d5-8b14-f5a1d2d22235.jsonl` (the build-out) and `e7756eab-d8b0-46a7-bc93-1720d74eb355.jsonl` (2026-11-13 → 14: CORS, M-Pesa sandbox, gate fixes, rename, terms, email, portal and dashboard, email verification). On the same machine, `claude --resume` lists past sessions and `claude -c` continues the most recent.
+- Local transcripts (this machine), in `~/.claude/projects/-home-mk-dev-mk-flix/`: `01f7c073-67e5-47d5-8b14-f5a1d2d22235.jsonl` (the build-out) and `e7756eab-d8b0-46a7-bc93-1720d74eb355.jsonl` (2026-11-13 → 14: CORS, M-Pesa sandbox, gate fixes, rename, terms, email, portal and dashboard, email verification, forgot password). On the same machine, `claude --resume` lists past sessions and `claude -c` continues the most recent.
 - On a different machine, this file + the three GitHub repos are the handoff.
