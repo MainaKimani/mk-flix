@@ -103,6 +103,15 @@
   .sent-to { color: var(--text); font-weight: 600; word-break: break-all; }
   .link.wait { color: var(--muted); cursor: default; }
   .ok-note { color: #7ee2b8; font-size: 13px; margin-top: 12px; text-align: center; min-height: 18px; }
+  /* Password field with a show/hide (eye) button inside its right edge. */
+  .pw { position: relative; }
+  .pw input { padding-right: 50px; }
+  button.pw-toggle { position: absolute; top: 50%; right: 6px; transform: translateY(-50%);
+    width: 40px; height: 40px; margin: 0; padding: 0; display: flex; align-items: center; justify-content: center;
+    border-radius: 9px; background: transparent; color: var(--muted); border: 0; }
+  button.pw-toggle:hover { color: var(--text); }
+  .pw-toggle svg { width: 20px; height: 20px; display: block; }
+  .hint { color: var(--muted); font-size: 12px; margin: 6px 2px 0; }
   .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .hidden { display: none; }
   @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
@@ -141,7 +150,13 @@
       <label for="email">Email</label>
       <input id="email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com">
       <label for="password">Password</label>
-      <input id="password" type="password" autocomplete="current-password" placeholder="••••••••">
+      <div class="pw">
+        <input id="password" type="password" autocomplete="current-password" placeholder="••••••••" aria-describedby="password-hint">
+        <button type="button" class="pw-toggle" data-for="password" aria-label="Show password" aria-pressed="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"></path><circle cx="12" cy="12" r="3"></circle><path class="slash" d="M3 3l18 18" style="display:none"></path></svg>
+        </button>
+      </div>
+      <p class="hint" id="password-hint">At least 6 characters, and not all numbers.</p>
       <div class="err" id="auth-err"></div>
       <button id="auth-submit">Continue</button>
       <a class="link" id="auth-toggle">Have an account? Sign in</a>
@@ -629,6 +644,9 @@
       ? "Have an account? Sign in" : "New here? Create an account";
     document.getElementById("auth-submit").textContent = mode === "register" ? "Create account" : "Sign in";
     document.getElementById("password").setAttribute("autocomplete", mode === "register" ? "new-password" : "current-password");
+    // The length rule only matters when choosing a password.
+    document.getElementById("password-hint").classList.toggle("hidden", mode !== "register");
+    setPasswordVisible(document.querySelector('.pw-toggle[data-for="password"]'), false);
     document.getElementById("auth-err").textContent = "";
     show("auth");
   }
@@ -813,6 +831,14 @@
 
   function logout() { clearTokens(); show("welcome"); }
 
+  // Show or hide a password field's text; the eye gets a slash while shown.
+  function setPasswordVisible(btn, visible) {
+    var input = document.getElementById(btn.getAttribute("data-for"));
+    input.type = visible ? "text" : "password";
+    btn.setAttribute("aria-pressed", visible ? "true" : "false");
+    btn.setAttribute("aria-label", visible ? "Hide password" : "Show password");
+    btn.querySelector(".slash").style.display = visible ? "" : "none";
+  }
 
   // --- Wiring --------------------------------------------------------------
   document.addEventListener("click", function (e) {
@@ -834,6 +860,12 @@
   document.getElementById("cj-save").addEventListener("click", saveCinejoy);
   document.getElementById("cj-back").addEventListener("click", backFromCinejoy);
   document.getElementById("logout-1").addEventListener("click", logout);
+  Array.prototype.forEach.call(document.querySelectorAll(".pw-toggle"), function (btn) {
+    btn.addEventListener("click", function () {
+      setPasswordVisible(btn, btn.getAttribute("aria-pressed") !== "true");
+      try { document.getElementById(btn.getAttribute("data-for")).focus(); } catch (e) {}
+    });
+  });
   document.getElementById("verify-btn").addEventListener("click", submitCode);
   document.getElementById("verify-resend").addEventListener("click", resendCode);
   document.getElementById("verify-logout").addEventListener("click", logout);
