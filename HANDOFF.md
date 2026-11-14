@@ -105,6 +105,7 @@ mk-flix commits:
 - `7aada6f` the account gate (onboarding + M-Pesa paywall) wired into both apps
 
 mk-flix-be commits:
+- `808c9eb` "password changed" email after a change from the account page too (107 tests)
 - `fb33082` forgot password: emailed single-use link to the portal (105 tests)
 - `8639a1b` passwords need 6 characters, not 8 (93 tests)
 - `b98b2c0` email verification with a 4-digit code
@@ -246,7 +247,8 @@ the gate (pure black, the mark's cyan/magenta/red, Ubuntu font).
   buttons, 6-character hint, mismatch caught in the browser). The token is
   stripped from the address bar once read, and the portal sends no referrer.
 - **After a reset:** the link is used up, the email counts as verified, and a
-  "Your password was changed" email goes out. Other signed-in sessions are not
+  "Your password was changed" email goes out. The same email (worded "from
+  your account settings") follows a change from `/account` (`808c9eb`). Other signed-in sessions are not
   ended (stateless JWTs) until their tokens expire.
 
 ## Admin dashboard
@@ -327,9 +329,8 @@ For local testing: `MKFLIX_API_BASE=http://localhost:8000/api npm start`.
 
 ## Not done yet / next steps
 
-- **Email:** sending works (SPF, DKIM, DMARC pass). Next emails worth adding: a
-  payment receipt, and "password changed" after a change from `/account`
-  (it's only sent after a reset today).
+- **Email:** sending works (SPF, DKIM, DMARC pass). Next email worth adding: a
+  payment receipt.
 - **Deploy the portal:** production `config.json`, the portal's origin in the
   backend's `CORS_ALLOWED_ORIGINS` and its address in `PORTAL_URL`, SPA fallback, HTTPS, and the release
   binaries in `public/downloads/` (names in `releases.json`).
