@@ -4,7 +4,7 @@
 > before this is published. Have a lawyer qualified in Kenya review it before
 > users are asked to accept it.
 
-**Last updated:** November 13, 2026
+**Last updated:** November 15, 2026
 
 ## 1. About these terms
 
@@ -112,8 +112,8 @@ account has been used without your permission.
 
 | Plan    | Price   | Access  |
 | ------- | ------- | ------- |
-| Weekly  | KES 99  | 7 days  |
-| Monthly | KES 299 | 30 days |
+| Weekly  | KES 119 | 7 days  |
+| Monthly | KES 359 | 30 days |
 
 Prices include any applicable taxes. We may change prices for future
 payments, and will show the current price before you pay.

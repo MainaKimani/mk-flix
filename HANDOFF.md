@@ -70,9 +70,10 @@ account is required, and must never point users at cinejoy.pk.
 - **Terms and Conditions** before paying: the gate's paywall has an unticked
   checkbox and a terms view (`mk-flix` `297ba70`); the backend refuses an STK
   push without `terms_version` and stores it on the payment (`mk-flix-be`
-  `a007382`). Current wording is `TERMS_VERSION = "2026-11-13.3"` (refunds only
-  if we shut Blendy Play down, `67bc01d`; CineJoy account optional, `e8ebd78`).
-  The draft still needs review by a lawyer qualified in Kenya.
+  `a007382`). Current wording is `TERMS_VERSION = "2026-11-15.1"` (refunds only
+  if we shut Blendy Play down, `67bc01d`; CineJoy account optional, `e8ebd78`;
+  prices KES 119 weekly and 359 monthly). The draft still needs review by a
+  lawyer qualified in Kenya.
 - **M-Pesa fixes:** the Daraja token is cached in a **database cache shared by
   all processes** (`367c8e7`, `aae22c4`), which stops Daraja's spike-arrest
   errors on status queries; a status query answering "The transaction does not
@@ -435,7 +436,7 @@ For local testing: `MKFLIX_API_BASE=http://localhost:8000/api npm start`.
    `MPESA_WEBHOOK_ENFORCE_IP=False` locally.
 3. Restart `runserver`, then pay from an app with a real Safaricom number.
    Local plans are currently **KES 1**; restore with
-   `python manage.py shell -c "from billing.models import Plan as P; P.objects.filter(code='weekly').update(price=99); P.objects.filter(code='monthly').update(price=299)"`.
+   `python manage.py shell -c "from billing.models import Plan as P; P.objects.filter(code='weekly').update(price=119); P.objects.filter(code='monthly').update(price=359)"`.
 
 ## Not done yet / next steps
 
