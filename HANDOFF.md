@@ -391,8 +391,9 @@ Android application id (`com.mainakimani.blendyplay`), signing key, desktop
 app id, Linux package (`blendy-play`) and desktop data folder are new too.
 Kept on purpose: the Java package / `namespace` `com.w2a.um1c`, the
 `MKFlixNative` bridge, `mkflix_*` storage keys, file names and repo names.
-- The main `README.md` still describes the v1.4.0 release as MK-Flix; it changes
-  with the release that ships the rename.
+- The main `README.md` describes Blendy Play 1.5.0 and points downloads at
+  the website; the MK-Flix release history (v1.2.7 to v1.4.0) was taken out
+  of it with that release.
 
 ## Running it locally (important gotchas)
 
