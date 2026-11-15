@@ -55,7 +55,6 @@ version and offer to install it.
 | [`release/`](./release/) | Packaging, signing and publishing a release. See its [README](./release/README.md). |
 | [`branding/`](./branding/) | Icon master artwork and the script that generates every icon. |
 | [`docs/`](./docs/) | The Terms and Conditions draft. |
-| [`cinejoy-v1.2.7/`](./cinejoy-v1.2.7/) | Snapshot of the app's first version, kept for reference. |
 
 The two apps share a few files that must stay identical between
 `mk-flix-desktop/` and `mk-flix-app/app/src/main/assets/`: `error.html`,
