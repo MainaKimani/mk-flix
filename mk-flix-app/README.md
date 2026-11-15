@@ -9,7 +9,7 @@ updates.
   key), so it installs alongside it. Neither the id nor the key may change
   again, or updates stop installing. The Java package and `namespace` stay
   `com.w2a.um1c`; that's only the code's name.
-- Version: 1.5.0 (versionCode 150), set in `app/build.gradle.kts`
+- Version: 1.5.1 (versionCode 151), set in `app/build.gradle.kts`
 - Android 7.0 (API 24) and newer; targets and compiles against API 34
 
 ## What's where

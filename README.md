@@ -2,7 +2,7 @@
 
 App built by **Blendy Studio (MK)**.
 
-## 🎬 Blendy Play — v1.5.0
+## 🎬 Blendy Play — v1.5.1
 
 Blendy Play is an Android, Android TV and desktop app for watching films and
 shows in their own fullscreen window, without the ads and pop-ups.
@@ -14,8 +14,8 @@ Get the latest version from the **[Blendy Play website](https://blendy.mainakima
 | Platform | How to install |
 |---|---|
 | Android 7.0+ and Android TV / Google TV | Phone: open the APK and allow installing from that source when asked. TV: use the Downloader app or `adb` ([how](./mk-flix-app/README.md#installing)). |
-| Windows 10/11 (64-bit) | Run `Blendy-Play-Setup-1.5.0.exe`. If Windows warns you, choose **More info**, then **Run anyway** (the app isn't code-signed yet). |
-| Ubuntu/Debian (64-bit) | `sudo apt install ./Blendy-Play_1.5.0_amd64.deb`, then open Blendy Play from your apps menu. |
+| Windows 10/11 (64-bit) | Run `Blendy-Play-Setup-1.5.1.exe`. If Windows warns you, choose **More info**, then **Run anyway** (the app isn't code-signed yet). |
+| Ubuntu/Debian (64-bit) | `sudo apt install ./Blendy-Play_1.5.1_amd64.deb`, then open Blendy Play from your apps menu. |
 
 Once installed, the apps update themselves: at launch they check for a new
 version and offer to install it.
@@ -82,6 +82,12 @@ python3 branding/make-icons.py   # needs Pillow
 ```
 
 ## Releases
+
+### v1.5.1
+
+- Smoother start: the loading screen stays up until the films are ready,
+  with no blank screen in between.
+- A simpler footer with the Blendy Play logo.
 
 ### v1.5.0
 
