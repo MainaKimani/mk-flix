@@ -25,8 +25,8 @@ android {
         applicationId = "com.mainakimani.blendyplay"
         minSdk = 24
         targetSdk = 34
-        versionCode = 140
-        versionName = "1.4.0"
+        versionCode = 150
+        versionName = "1.5.0"
     }
 
     signingConfigs {
