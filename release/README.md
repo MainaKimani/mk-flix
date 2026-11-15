@@ -11,8 +11,10 @@ downloads/
     Blendy-Play_1.5.0.apk
     Blendy-Play-Setup-1.5.0.exe
     Blendy-Play_1.5.0_amd64.deb
-  1.4.0/ ...             older versions can stay
 ```
+
+Only the latest version is kept: once a new release is live, its previous
+version folder is deleted (step 5 below).
 
 At launch, each app downloads `releases.json` and `releases.json.sig` and
 checks the signature against the public key built into it
@@ -50,8 +52,9 @@ hold the manifest's public key, and Android remembers the APK's signer.
      JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ./build-apk.sh
    cd ../mk-flix-desktop && npm run dist-win && npm run dist-linux
    ```
-   `dist-win` builds the Windows installer and needs Wine on Linux
-   (`sudo apt install wine`).
+   `dist-win` builds the Windows installer and needs Wine on Linux,
+   including its 32-bit part (`wine32`). If that can't be installed, build
+   it in a container instead (see "Windows without wine32" below).
 3. **Package and sign**, from the repo root:
    ```sh
    node release/publish.mjs --notes "What changed, in a sentence" --notes "Another change"
@@ -64,10 +67,37 @@ hold the manifest's public key, and Android remembers the APK's signer.
    the new version folder first, then `releases.json` and
    `releases.json.sig` last, so no app sees the new version before its files
    are there.
-5. If you set a minimum, set the same one on the backend
+5. **Delete the previous version's folder** from `downloads/` (e.g. `1.4.0/`)
+   once the new manifest is up: nothing points at it any more. Only the
+   latest version is offered.
+6. If you set a minimum, set the same one on the backend
    (`MIN_APP_VERSION_ANDROID` / `_WINDOWS` / `_LINUX` in `mk-flix-be/.env`):
    apps that don't check the manifest then get `426` from the API and show
    **Update required** too.
+
+## Windows without wine32
+
+electron-builder runs a 32-bit Windows program through Wine while it builds
+the installer, so a 64-bit-only Wine fails with
+`wine: failed to load ...\syswow64\ntdll.dll`. Installing `wine32` can be
+impossible when another source (such as a PHP PPA) holds a newer 64-bit
+library than Ubuntu's 32-bit one; apt then offers to remove half the desktop.
+Don't accept that. Build in electron-builder's own image instead (about 5 GB
+of disk, downloaded once), with podman or docker:
+
+```sh
+cd mk-flix-desktop
+podman run --rm -v "$PWD":/project:Z \
+  -v ~/.cache/electron:/root/.cache/electron:Z \
+  -v ~/.cache/electron-builder:/root/.cache/electron-builder:Z \
+  -w /project docker.io/electronuserland/builder:wine \
+  npx electron-builder --win nsis --x64
+```
+
+The installer lands in `mk-flix-desktop/dist/` as usual. `mkflix-config.json`
+must hold an empty `apiBase` while building, as for every release build.
+Remove the image afterwards with `podman rmi electronuserland/builder:wine`
+if disk space is short.
 
 ## Testing an update locally
 
