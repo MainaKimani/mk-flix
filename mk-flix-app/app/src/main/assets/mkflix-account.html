@@ -388,10 +388,12 @@
   }
 
   // --- Native bridge -------------------------------------------------------
-  // The app (window.MKFlixNative) checks the backend itself and decides whether
-  // playback is allowed on cinejoy.pk, so a page there can't fake a subscription.
-  // We hand it the session and tell it to re-check after a payment. Guarded so
-  // the gate still works in a plain browser (no bridge).
+  // The app (window.MKFlixNative) decides whether playback is allowed on the
+  // site. We hand it the session and the answer of each subscription check
+  // here, so it doesn't ask the backend again; it accepts that answer from
+  // this page only, so a page on the site can't fake a subscription. It also
+  // shows its splash while we hand over to the site. Guarded so the gate
+  // still works in a plain browser (no bridge).
   function nativeSaveSession() {
     try {
       if (window.MKFlixNative && window.MKFlixNative.saveSession)
@@ -401,8 +403,15 @@
   function nativeClear() {
     try { if (window.MKFlixNative && window.MKFlixNative.clearSession) window.MKFlixNative.clearSession(); } catch (e) {}
   }
-  function nativeRefresh() {
-    try { if (window.MKFlixNative && window.MKFlixNative.refreshSubscription) window.MKFlixNative.refreshSubscription(); } catch (e) {}
+  function nativeSetSubscribed(active) {
+    try { if (window.MKFlixNative && window.MKFlixNative.setSubscribed) window.MKFlixNative.setSubscribed(!!active); } catch (e) {}
+  }
+  function nativeSplash(on) {
+    try {
+      var B = window.MKFlixNative;
+      if (B && on && B.showSplash) B.showSplash();
+      if (B && !on && B.hideSplash) B.hideSplash();
+    } catch (e) {}
   }
 
   // --- Fetch helpers -------------------------------------------------------
@@ -458,6 +467,9 @@
   function show(name) {
     // A required update blocks every other screen.
     if (updateBlocking && name !== "update") return;
+    // The app's splash covers "loading" (at startup, and while we hand over
+    // to the site); any real screen takes it down.
+    if (name !== "loading") nativeSplash(false);
     var views = document.querySelectorAll("[data-view]");
     for (var i = 0; i < views.length; i++) {
       views[i].classList.toggle("hidden", views[i].getAttribute("data-view") !== name);
@@ -481,27 +493,15 @@
     else gotoSite();
   }
 
-  function gotoSite() { window.location.href = CINEJOY_URL; }
-
-  // Go to the site as a subscriber. The app decides playback from its own
-  // backend check (MKFlixNative.isSubscribed), which runs in the background
-  // after nativeSaveSession(). Opening the site before that check lands left
-  // the padlocks on and Play sending a paying user back here, so wait (briefly)
-  // until the app agrees. After the timeout go anyway: the enforcer re-asks the
-  // app on every Play, so a late answer still unlocks playback.
-  var NATIVE_WAIT_MS = 5000;
-  function enterSite() {
-    var B = window.MKFlixNative;
-    if (!B || !B.isSubscribed) { gotoSite(); return; }
+  // Open the site, with the app's splash over the wait until it has drawn its
+  // content. A subscriber goes the same way: the app already has this check's
+  // answer (nativeSetSubscribed), so the padlocks are off from the first paint.
+  function gotoSite() {
     show("loading");
-    var started = Date.now();
-    (function wait() {
-      var ok = false;
-      try { ok = !!B.isSubscribed(); } catch (e) { ok = true; }
-      if (ok || Date.now() - started > NATIVE_WAIT_MS) { gotoSite(); return; }
-      setTimeout(wait, 150);
-    })();
+    nativeSplash(true);
+    window.location.href = CINEJOY_URL;
   }
+  function enterSite() { gotoSite(); }
 
   // --- Flow ----------------------------------------------------------------
   // Where the gate was opened from decides what a subscriber sees:
@@ -523,6 +523,7 @@
         // stale token, and keep treating a subscriber as unsubscribed.
         nativeSaveSession();
         var sub = r.data;
+        nativeSetSubscribed(sub.active);
         if (mode === "subscription") {
           if (sub.active || (sub.status && sub.status !== "NONE")) showSubscription(sub);
           else showPaywall(inactiveNotice(sub));
@@ -982,7 +983,7 @@
     authed("/payments/" + id).then(function (r) {
       if (r.ok && r.data) {
         var s = r.data.status;
-        if (s === "SUCCEEDED") { nativeRefresh(); checkAccess("subscription"); return; }
+        if (s === "SUCCEEDED") { checkAccess("subscription"); return; }
         if (s === "FAILED" || s === "CANCELLED") {
           document.getElementById("poll-err").textContent = "Payment wasn't completed.";
           setTimeout(showPaywall, 2500);

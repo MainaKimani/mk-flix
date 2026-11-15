@@ -137,18 +137,33 @@ public class MainActivity extends Activity {
 
     private static final int REQUEST_STORAGE_PERMISSION = 1;
 
-    // Startup splash, shown when the app is opened (not when Android
-    // restores it after a rotation or a trip to the background). See
+    // Splash: shown when the app is opened (not when Android restores it
+    // after a rotation or a trip to the background), and again whenever the
+    // gate hands over to the site. It stays up through the account check and
+    // the site's loading, until the site has drawn its content. See
     // showSplash().
     private FrameLayout splash;
     private long splashShownAt;
+    private long splashMinMs;
     private ObjectAnimator splashPulse;
+    private boolean watchingForContent;
     private final Runnable splashTimeout = this::dismissSplash;
-    // Shown at least this long, so it reads as an intro rather than a flicker.
+    // At startup it's shown at least this long, so it reads as an intro
+    // rather than a flicker. The hand-off splash has no minimum.
     private static final long SPLASH_MIN_MS = 3000;
     // Taken down after this long even if the page is still loading, so a
     // slow network shows the site's own progress instead of a stuck splash.
     private static final long SPLASH_MAX_MS = 15000;
+    // True once the site has drawn its content: a section heading or a
+    // video, and an image loaded on screen. Until then it shows only its
+    // dark green background. Also true for any page that isn't the site.
+    private static final String CONTENT_READY_JS = "(function(){"
+            + "if(!/(^|\\.)cinejoy\\.pk$/.test(location.hostname))return true;"
+            + "function vis(e){var r=e.getBoundingClientRect();return r.width>0&&r.height>0"
+            + "&&r.top<innerHeight&&r.bottom>0&&getComputedStyle(e).visibility!=='hidden';}"
+            + "var text=[].some.call(document.querySelectorAll('h1,h2,video'),vis);"
+            + "var img=[].some.call(document.images,function(i){return i.complete&&i.naturalWidth>0&&vis(i);});"
+            + "return text&&img;})()";
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -162,7 +177,7 @@ public class MainActivity extends Activity {
         // background says; that was the white flash at startup.
         webView.setBackgroundColor(Color.BLACK);
         if (savedInstanceState == null) {
-            showSplash();
+            showSplash(SPLASH_MIN_MS);
         }
         loadAdBlockList();
         footerJs = readAsset("mkflix-footer.js");
@@ -343,9 +358,16 @@ public class MainActivity extends Activity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
-                // First page is in: hand over from the splash. Not for a page
-                // that failed, which is about to be replaced by the error screen.
-                if (isErrorPage(url) || !sameUrl(url, errorPageFailedUrl)) {
+                // Hand over from the splash. The gate takes it down itself when
+                // it shows a screen (hideSplash), and keeps it while it checks
+                // the account and hands over to the site. The site keeps it
+                // until its content is drawn. Not for a page that failed, which
+                // is about to be replaced by the error screen.
+                if (url != null && url.startsWith(ACCOUNT_PAGE)) {
+                    // The gate decides.
+                } else if (isCineJoyUrl(url)) {
+                    dismissSplashWhenContentShows();
+                } else if (isErrorPage(url) || !sameUrl(url, errorPageFailedUrl)) {
                     dismissSplash();
                 }
                 try {
@@ -476,16 +498,24 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * Startup splash: the MK-Flix mark, gently pulsing, with the wordmark and
-     * a loading bar under it, until the first page has loaded.
+     * Splash: the Blendy Play mark, gently pulsing, with the wordmark and a
+     * loading bar under it, until the site has drawn its content.
      *
-     * The window background (res/drawable/splash_window.xml) already shows
-     * the mark from the moment the app opens, while the WebView starts up,
-     * and on Android 12+ the system splash shows the icon in the same spot.
-     * This view takes over from them without the mark moving, then fades
-     * out to reveal the page.
+     * At startup the window background (res/drawable/splash_window.xml)
+     * already shows the mark from the moment the app opens, while the WebView
+     * starts up, and on Android 12+ the system splash shows the icon in the
+     * same spot. This view takes over from them without the mark moving, then
+     * fades out to reveal the page. When the gate hands over to the site
+     * later, it fades in over the gate instead.
+     *
+     * @param minMs how long it stays up at least: SPLASH_MIN_MS at startup,
+     *              0 for the hand-off
      */
-    private void showSplash() {
+    private void showSplash(long minMs) {
+        if (splash != null) {
+            return; // already up: the startup splash carries on
+        }
+        boolean handOff = minMs == 0;
         float dp = getResources().getDisplayMetrics().density;
         splash = new FrameLayout(this);
         splash.setBackgroundColor(Color.BLACK);
@@ -525,6 +555,10 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
         splash.getViewTreeObserver().addOnPreDrawListener(splashAligner);
+        if (handOff) {
+            splash.setAlpha(0f);
+            splash.animate().alpha(1f).setDuration(200);
+        }
 
         word.animate().alpha(1f).translationY(0f)
                 .setStartDelay(250).setDuration(500)
@@ -544,7 +578,38 @@ public class MainActivity extends Activity {
         splashPulse.start();
 
         splashShownAt = SystemClock.uptimeMillis();
+        splashMinMs = minMs;
         webView.postDelayed(splashTimeout, SPLASH_MAX_MS);
+    }
+
+    /**
+     * Take the splash down once the site has drawn its content
+     * (CONTENT_READY_JS), checking every 250 ms. SPLASH_MAX_MS still applies,
+     * and the gate's hideSplash ends it too if the site sends the user there.
+     */
+    private void dismissSplashWhenContentShows() {
+        if (splash == null || watchingForContent) {
+            return;
+        }
+        watchingForContent = true;
+        webView.post(new Runnable() {
+            @Override
+            public void run() {
+                if (splash == null || webView == null) {
+                    watchingForContent = false;
+                    return;
+                }
+                final Runnable again = this;
+                webView.evaluateJavascript(CONTENT_READY_JS, value -> {
+                    if ("true".equals(value) || splash == null) {
+                        watchingForContent = false;
+                        dismissSplash();
+                    } else {
+                        webView.postDelayed(again, 250);
+                    }
+                });
+            }
+        });
     }
 
     /**
@@ -574,20 +639,22 @@ public class MainActivity extends Activity {
         }
     };
 
-    /** Fade the splash out, once it has been up for SPLASH_MIN_MS. */
+    /** Fade the splash out, once it has been up for its minimum time. */
     private void dismissSplash() {
         if (splash == null) {
             return;
         }
         final FrameLayout leaving = splash;
+        // Its own pulse: a new splash may start while this one fades out.
+        final ObjectAnimator pulse = splashPulse;
         splash = null;
+        splashPulse = null;
         webView.removeCallbacks(splashTimeout);
-        long wait = Math.max(0, SPLASH_MIN_MS - (SystemClock.uptimeMillis() - splashShownAt));
+        long wait = Math.max(0, splashMinMs - (SystemClock.uptimeMillis() - splashShownAt));
         leaving.animate().alpha(0f).setStartDelay(wait).setDuration(450)
                 .withEndAction(() -> {
-                    if (splashPulse != null) {
-                        splashPulse.cancel();
-                        splashPulse = null;
+                    if (pulse != null) {
+                        pulse.cancel();
                     }
                     ViewGroup parent = (ViewGroup) leaving.getParent();
                     if (parent != null) {
@@ -1262,11 +1329,14 @@ public class MainActivity extends Activity {
     // --- Subscription --------------------------------------------------------
 
     /**
-     * The MK-Flix subscription as the app sees it. The gate hands the app the
-     * session (saveSession) and the app checks the backend itself
-     * (/me/subscription), so a cinejoy.pk page can't grant itself a
-     * subscription. The answer is cached and persisted, read synchronously by
-     * the enforcer, and refreshed in the background.
+     * The Blendy Play subscription as the app sees it. The gate hands the app
+     * the session (saveSession) and the answer of its own /me/subscription
+     * check (setSubscribed, accepted from the gate only), so the app doesn't
+     * ask the backend a second time and the site can open at once. A page on
+     * cinejoy.pk can't grant itself a subscription: the bridge refuses it
+     * there. The answer is cached and persisted, read synchronously by the
+     * enforcer, and refreshed in the background once it's stale, or when the
+     * gate asks after a payment (refreshSubscription).
      */
     private final class Subscription {
         private static final String PREFS = "mkflix";
@@ -1301,7 +1371,13 @@ public class MainActivity extends Activity {
             this.access = access == null ? "" : access;
             this.refresh = refresh == null ? "" : refresh;
             persist();
-            refreshAsync();
+        }
+
+        /** The gate's answer, just fetched from the backend with this session. */
+        void setActive(boolean active) {
+            this.active = active;
+            checkedAt = System.currentTimeMillis();
+            persist();
         }
 
         void clear() {
@@ -1393,6 +1469,30 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void refreshSubscription() {
             subscription.refreshAsync();
+        }
+
+        /** The gate's /me/subscription answer. Ignored from any other page. */
+        @JavascriptInterface
+        public void setSubscribed(boolean active) {
+            if (onGate()) {
+                subscription.setActive(active);
+            }
+        }
+
+        /** The gate is about to open the site: cover the wait with the splash. */
+        @JavascriptInterface
+        public void showSplash() {
+            if (onGate()) {
+                runOnUiThread(() -> MainActivity.this.showSplash(0));
+            }
+        }
+
+        /** The gate is showing a screen: take the splash down. */
+        @JavascriptInterface
+        public void hideSplash() {
+            if (onGate()) {
+                runOnUiThread(MainActivity.this::dismissSplash);
+            }
         }
 
         @JavascriptInterface

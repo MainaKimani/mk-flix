@@ -183,8 +183,11 @@ ipcMain.on('mkflix:open-downloads', (event) => {
 });
 
 // ---- Subscription (playback gate) ----
-// The account gate hands us the session; we check the MK-Flix backend ourselves,
-// so a page on cinejoy.pk can't fake a subscription. The enforcer injected into
+// The account gate hands us the session and the answer of its own
+// /me/subscription check (mkflix:set-subscribed, accepted from the gate only),
+// so we don't ask the backend a second time and the site can open at once. A
+// page on cinejoy.pk can't fake a subscription. After a payment the gate
+// checks again and hands over the new answer. The enforcer injected into
 // cinejoy pages reads `subscribed` synchronously and blocks /watch/ when false.
 const http = require('http');
 const https = require('https');
@@ -233,7 +236,18 @@ ipcMain.on('mkflix:save-session', (_event, s) => {
     access: (s && s.access) || '',
     refresh: (s && s.refresh) || '',
   };
-  refreshSubscription();
+});
+ipcMain.on('mkflix:set-subscribed', (event, active) => {
+  if (fromGate(event)) subscribed = active === true;
+});
+// The gate shows the splash while it hands over to the site, and takes it
+// down when it shows a screen.
+ipcMain.on('mkflix:splash', (event, on) => {
+  if (!fromGate(event)) return;
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win) return;
+  if (on) showSplash(win, 0);
+  else dismissSplash(win);
 });
 ipcMain.on('mkflix:clear-session', () => {
   mkSession = { apiBase: '', access: '', refresh: '' };
@@ -318,16 +332,34 @@ function setUpSession() {
   ses.setPermissionCheckHandler((_wc, permission) => ALLOWED_PERMISSIONS.has(permission));
 }
 
-// Startup splash (splash.html), the same as the Android app's: shown over
-// the main window from the moment it opens while cinejoy.pk loads
-// underneath, then faded out. It stays up at least SPLASH_MIN_MS, so it reads
-// as an intro rather than a flicker, and at most SPLASH_MAX_MS, so a slow
-// network shows the site's own progress instead of a stuck splash.
+// Splash (splash.html), the same as the Android app's: shown over the main
+// window from the moment it opens, and again whenever the gate hands over to
+// the site. It stays up through the account check and the site's loading,
+// until the site has drawn its content: the gate takes it down when it shows
+// a screen (mkflix:splash), the site when its content is in (see
+// watchSplashHandOff). At startup it stays up at least SPLASH_MIN_MS, so it
+// reads as an intro rather than a flicker; the hand-off has no minimum. At
+// most SPLASH_MAX_MS, so a slow network shows the site's own progress
+// instead of a stuck splash.
 const SPLASH_MIN_MS = 3000;
 const SPLASH_MAX_MS = 15000;
 const SPLASH_FADE_MS = 450; // matches the transition in splash.html
+// The splash showing over each window, as { dismiss }.
+const splashes = new WeakMap();
+// True once the site has drawn its content: a section heading or a video,
+// and an image loaded on screen. Until then it shows only its dark green
+// background. Also true for any page that isn't the site.
+const CONTENT_READY_JS = `(() => {
+  if (!/(^|\\.)cinejoy\\.pk$/.test(location.hostname)) return true;
+  const vis = (e) => { const r = e.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && r.top < innerHeight && r.bottom > 0 && getComputedStyle(e).visibility !== 'hidden'; };
+  const text = [...document.querySelectorAll('h1, h2, video')].some(vis);
+  const img = [...document.images].some((i) => i.complete && i.naturalWidth > 0 && vis(i));
+  return text && img;
+})()`;
 
-function showSplash(win) {
+function showSplash(win, minMs) {
+  if (win.isDestroyed() || splashes.has(win)) return; // already up: it carries on
   const splash = new WebContentsView();
   splash.setBackgroundColor('#000000');
   const fit = () => {
@@ -345,9 +377,9 @@ function showSplash(win) {
     if (contents && !contents.isDestroyed()) contents.close();
   };
 
-  // Open the window once the splash can paint, so it starts on the splash
-  // rather than an empty black frame. The timer covers a splash that never
-  // loads, so the window still appears.
+  // At startup, open the window once the splash can paint, so it starts on
+  // the splash rather than an empty black frame. The timer covers a splash
+  // that never loads, so the window still appears.
   const show = () => {
     if (!win.isDestroyed() && !win.isVisible()) win.show();
   };
@@ -359,8 +391,10 @@ function showSplash(win) {
   const dismiss = () => {
     if (dismissed) return;
     dismissed = true;
+    // Free the slot now, so a new hand-off can start while this one fades.
+    if (splashes.get(win) === entry) splashes.delete(win);
     clearTimeout(maxTimer);
-    const wait = Math.max(0, SPLASH_MIN_MS - (Date.now() - shownAt));
+    const wait = Math.max(0, minMs - (Date.now() - shownAt));
     setTimeout(() => {
       if (win.isDestroyed()) return;
       splash.webContents.executeJavaScript("document.body.classList.add('leaving')").catch(() => {});
@@ -374,14 +408,38 @@ function showSplash(win) {
       }, SPLASH_FADE_MS);
     }, wait);
   };
+  const entry = { dismiss };
+  splashes.set(win, entry);
   const maxTimer = setTimeout(dismiss, SPLASH_MAX_MS);
-  // The first page in, whether cinejoy.pk or the error screen (a failed
-  // load fires did-fail-load instead, then error.html finishes loading).
-  win.webContents.once('did-finish-load', dismiss);
   win.once('closed', () => {
     clearTimeout(maxTimer);
     clearTimeout(showFallback);
     closeSplash();
+  });
+}
+
+function dismissSplash(win) {
+  const entry = win && splashes.get(win);
+  if (entry) entry.dismiss();
+}
+
+// Takes the splash down when a page is in: the site once its content is
+// drawn (checked every 250 ms), the error screen at once. The gate decides
+// for itself.
+function watchSplashHandOff(win) {
+  let watching = false;
+  win.webContents.on('did-finish-load', () => {
+    const url = win.webContents.getURL();
+    if (url.startsWith('file:') && url.includes('mkflix-account.html')) return;
+    if (!isCineJoy(hostOf(url))) { dismissSplash(win); return; }
+    if (watching) return;
+    watching = true;
+    const check = async () => {
+      if (win.isDestroyed() || !splashes.has(win)) { watching = false; return; }
+      const ready = await win.webContents.executeJavaScript(CONTENT_READY_JS).catch(() => false);
+      if (ready) { watching = false; dismissSplash(win); } else setTimeout(check, 250);
+    };
+    check();
   });
 }
 
@@ -402,7 +460,8 @@ function createWindow() {
     webPreferences: { preload: path.join(__dirname, 'preload.js') },
   });
 
-  showSplash(win);
+  showSplash(win, SPLASH_MIN_MS);
+  watchSplashHandOff(win);
   // Start on the account gate, not the site. It checks for an active MK-Flix
   // subscription against the backend and sends the window to cinejoy.pk itself
   // (guardNavigation allows that) once the user is signed in and subscribed.
