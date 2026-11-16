@@ -1,6 +1,8 @@
 const { app, BrowserWindow, WebContentsView, ipcMain, session, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
+const crypto = require('crypto');
 
 const HOME_URL = 'https://cinejoy.pk/';
 const APP_TITLE = 'Blendy Play: Powered by CineJoy';
@@ -148,8 +150,34 @@ function fromGate(event) {
   const url = (event.senderFrame && event.senderFrame.url) || '';
   return url.startsWith('file://');
 }
+// This install's id and a name for it, sent when signing in so the account's
+// devices list can show it and signing in again here reuses its place. The id
+// is random, made once and kept in the app's data folder.
+let deviceIdCache = null;
+function deviceId() {
+  if (deviceIdCache) return deviceIdCache;
+  const file = path.join(app.getPath('userData'), 'device-id');
+  try {
+    deviceIdCache = fs.readFileSync(file, 'utf8').trim();
+  } catch (e) { /* not made yet */ }
+  if (!deviceIdCache) {
+    deviceIdCache = crypto.randomUUID();
+    try { fs.writeFileSync(file, deviceIdCache); } catch (e) { /* use it for this run */ }
+  }
+  return deviceIdCache;
+}
+function deviceName() {
+  const system = { win32: 'Windows', linux: 'Linux', darwin: 'Mac' }[process.platform] || process.platform;
+  const host = (os.hostname() || '').trim();
+  return (host ? `${host} (${system})` : `${system} computer`).slice(0, 100);
+}
 ipcMain.on('mkflix:app-info', (event) => {
-  event.returnValue = { version: app.getVersion(), platform: APP_PLATFORM };
+  event.returnValue = {
+    version: app.getVersion(),
+    platform: APP_PLATFORM,
+    deviceId: deviceId(),
+    deviceName: deviceName(),
+  };
 });
 ipcMain.handle('mkflix:update-check', async (event) => {
   if (!fromGate(event)) return { status: 'none' };
@@ -194,6 +222,8 @@ const https = require('https');
 let mkSession = { apiBase: '', access: '', refresh: '' };
 let subscribed = false;
 
+// Resolves to { status, data } (data null if the body isn't JSON), or null
+// if the backend couldn't be reached.
 function getJson(url, token) {
   return new Promise((resolve) => {
     let lib;
@@ -212,8 +242,9 @@ function getJson(url, token) {
       let body = '';
       res.on('data', (d) => (body += d));
       res.on('end', () => {
-        if (res.statusCode !== 200) return resolve(null);
-        try { resolve(JSON.parse(body)); } catch (e) { resolve(null); }
+        let data = null;
+        try { data = JSON.parse(body); } catch (e) { /* not JSON */ }
+        resolve({ status: res.statusCode, data });
       });
     });
     req.on('error', () => resolve(null));
@@ -221,14 +252,36 @@ function getJson(url, token) {
   });
 }
 
+let checking = false;
 async function refreshSubscription() {
   if (!mkSession.apiBase || !mkSession.access) { subscribed = false; return; }
-  const data = await getJson(`${mkSession.apiBase}/me/subscription`, mkSession.access);
-  // On a transient failure (offline, expired access token) keep the last known
-  // answer rather than locking out a real subscriber; the gate re-sends the
-  // session and re-checks each time it runs.
-  if (data && typeof data.active === 'boolean') subscribed = data.active;
+  if (checking) return; // one check at a time
+  checking = true;
+  try {
+    const res = await getJson(`${mkSession.apiBase}/me/subscription`, mkSession.access);
+    const data = res && res.data;
+    if (res && res.status === 200 && data && typeof data.active === 'boolean') {
+      subscribed = data.active;
+    } else if (res && res.status === 401 && data && data.code === 'session_revoked') {
+      // Signed out from the devices list (or by a password change): stop
+      // playback and send every window to the gate, which shows sign-in.
+      mkSession = { apiBase: '', access: '', refresh: '' };
+      subscribed = false;
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.loadFile(path.join(__dirname, 'mkflix-account.html'));
+      }
+    }
+    // Anything else (offline, an expired access token): keep the last known
+    // answer rather than locking out a real subscriber; the gate re-sends the
+    // session and re-checks each time it runs.
+  } finally {
+    checking = false;
+  }
 }
+// Re-check now and then while the app is open, so a device signed out from
+// the portal, or a subscription that ran out, stops playback without a
+// restart.
+setInterval(refreshSubscription, 10 * 60 * 1000).unref();
 
 ipcMain.on('mkflix:save-session', (_event, s) => {
   mkSession = {

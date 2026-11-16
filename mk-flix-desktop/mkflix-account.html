@@ -444,12 +444,28 @@
     });
   }
 
+  function isRevoked(r) { return r.status === 401 && r.data && r.data.code === "session_revoked"; }
+
+  // This install's id and name, so the account's devices list shows this
+  // device and signing in again here reuses its place (none in a browser).
+  function deviceInfo() {
+    var N = window.MKFlixNative, info = {};
+    try {
+      if (N && N.getDeviceId) info.device_id = N.getDeviceId();
+      if (N && N.getDeviceName) info.device_name = N.getDeviceName();
+    } catch (e) {}
+    return info;
+  }
+
   // Authenticated request that refreshes the access token once on a 401.
   function authed(path, opts) {
     opts = opts || {};
     opts.auth = true;
     return request(path, opts).then(function (r) {
       if (r.status !== 401) return r;
+      // Signed out from the devices list or by a password change: a refresh
+      // would be refused too.
+      if (isRevoked(r)) { clearTokens(); return r; }
       var refresh = getRefresh();
       if (!refresh) return r;
       return request("/auth/refresh", { method: "POST", body: { refresh: refresh } }).then(function (rr) {
@@ -534,6 +550,10 @@
         }
       } else if (r.status === 403 && r.data && r.data.code === "email_not_verified") {
         showVerify();
+      } else if (isRevoked(r)) {
+        clearTokens();
+        openAuth("login");
+        document.getElementById("auth-err").textContent = r.data.detail || "This device was signed out. Sign in again.";
       } else if (r.status === 401) {
         clearTokens(); show("welcome");
       } else {
@@ -860,8 +880,17 @@
     if (!email || !password) { err.textContent = "Enter your email and password."; return; }
     btn.disabled = true;
     var path = authMode === "register" ? "/auth/register" : "/auth/login";
-    request(path, { method: "POST", body: { email: email, password: password } }).then(function (r) {
+    var body = deviceInfo();
+    body.email = email;
+    body.password = password;
+    request(path, { method: "POST", body: body }).then(function (r) {
       btn.disabled = false;
+      if (!r.ok && r.data && r.data.code === "device_limit") {
+        err.textContent = r.data.detail;
+        var names = (r.data.devices || []).map(function (d) { return d.name; }).filter(Boolean);
+        if (names.length) err.textContent += " Signed in now: " + names.join(", ") + ".";
+        return;
+      }
       if (r.ok) {
         var tokens = r.data.tokens || r.data; // register wraps tokens; login is flat
         setTokens(tokens.access, tokens.refresh);
@@ -1029,7 +1058,12 @@
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) {
     return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
 
-  function logout() { clearTokens(); show("welcome"); }
+  // Tells the backend first, so this device's place on the account is freed.
+  function logout() {
+    if (getAccess()) request("/auth/logout", { method: "POST", auth: true }).catch(function () {});
+    clearTokens();
+    show("welcome");
+  }
 
   // --- Forgot password -------------------------------------------------------
   // The backend emails a link to the Blendy Play website, where the new

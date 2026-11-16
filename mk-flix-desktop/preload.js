@@ -34,6 +34,9 @@ contextBridge.exposeInMainWorld('MKFlixNative', {
   // Version and platform, sent to the backend as X-App-Version / X-App-Platform.
   getAppVersion: () => appInfo().version,
   getPlatform: () => appInfo().platform,
+  // This install's id and name, sent when signing in (the devices list).
+  getDeviceId: () => appInfo().deviceId,
+  getDeviceName: () => appInfo().deviceName,
   // In-app updates (see updater.js). Only the account gate gets real answers.
   checkUpdate: () => ipcRenderer.invoke('mkflix:update-check'),
   startUpdate: () => ipcRenderer.invoke('mkflix:update-start'),

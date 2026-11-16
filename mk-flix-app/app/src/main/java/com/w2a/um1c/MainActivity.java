@@ -794,6 +794,58 @@ public class MainActivity extends Activity {
     }
 
     /**
+     * This install's id: random, made once and kept with the app's data, so
+     * signing in again on this device reuses its place in the account's
+     * devices instead of taking another.
+     */
+    private synchronized String deviceId() {
+        SharedPreferences p = getSharedPreferences("mkflix", MODE_PRIVATE);
+        String id = p.getString("deviceId", "");
+        if (id.isEmpty()) {
+            id = java.util.UUID.randomUUID().toString();
+            p.edit().putString("deviceId", id).apply();
+        }
+        return id;
+    }
+
+    /**
+     * How the devices list names this one: the name its owner gave it in
+     * Settings ("Wanjiru's Galaxy"), or else maker and model ("Samsung
+     * SM-A515F", "Google Chromecast").
+     */
+    private String deviceName() {
+        try {
+            String own = android.provider.Settings.Global.getString(getContentResolver(), "device_name");
+            if (own != null && !own.trim().isEmpty()) {
+                own = own.trim();
+                return own.length() > 100 ? own.substring(0, 100) : own;
+            }
+        } catch (Exception ignored) {
+            // Not available on this device: fall back to maker and model.
+        }
+        String maker = Build.MANUFACTURER == null ? "" : Build.MANUFACTURER.trim();
+        String model = Build.MODEL == null ? "" : Build.MODEL.trim();
+        if (!maker.isEmpty()) {
+            maker = Character.toUpperCase(maker.charAt(0)) + maker.substring(1);
+        }
+        String name = model.toLowerCase().startsWith(maker.toLowerCase()) ? model : (maker + " " + model).trim();
+        if (name.isEmpty()) {
+            name = isTv ? "Android TV" : "Android phone";
+        }
+        return name.length() > 100 ? name.substring(0, 100) : name;
+    }
+
+    private static String readAll(InputStream is) throws java.io.IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        byte[] buf = new byte[4096];
+        int n;
+        while ((n = is.read(buf)) > 0) {
+            out.write(buf, 0, n);
+        }
+        return out.toString("UTF-8");
+    }
+
+    /**
      * The "My Subscription" menu entry: the account gate opened on its
      * subscription page (a subscriber would otherwise go straight back to the
      * site).
@@ -1426,9 +1478,15 @@ public class MainActivity extends Activity {
             }
             new Thread(() -> {
                 try {
-                    int[] status = new int[1];
+                    int[] status = new int[2];
                     Boolean result = fetchActive(base, token, status);
-                    if (result != null) {
+                    if (status[1] == 1) {
+                        // This device was signed out (from the devices list, or
+                        // by a password change): stop playback and show the
+                        // gate, which asks to sign in again.
+                        clear();
+                        openPaywall();
+                    } else if (result != null) {
                         active = result;
                         checkedAt = System.currentTimeMillis();
                         retryDelay = RETRY_MIN_MS;
@@ -1451,8 +1509,10 @@ public class MainActivity extends Activity {
         /**
          * GET {base}/me/subscription: the `active` flag, or null on any
          * failure, with the HTTP status in status[0] (0 if there was no
-         * answer). A failure never becomes "not subscribed": a transient blip
-         * or an expired access token mustn't lock out a real subscriber.
+         * answer) and status[1] set to 1 when the backend says this device
+         * was signed out ("session_revoked"). Any other failure never becomes
+         * "not subscribed": a transient blip or an expired access token
+         * mustn't lock out a real subscriber.
          */
         private Boolean fetchActive(String base, String token, int[] status) {
             HttpURLConnection conn = null;
@@ -1465,18 +1525,24 @@ public class MainActivity extends Activity {
                 conn.setConnectTimeout(15000);
                 conn.setReadTimeout(15000);
                 status[0] = conn.getResponseCode();
+                if (status[0] == 401) {
+                    InputStream err = conn.getErrorStream();
+                    if (err != null) {
+                        try (InputStream is = err) {
+                            String body = readAll(is);
+                            if ("session_revoked".equals(new JSONObject(body).optString("code"))) {
+                                status[1] = 1;
+                            }
+                        }
+                    }
+                    return null;
+                }
                 if (status[0] != 200) {
                     return null;
                 }
-                ByteArrayOutputStream out = new ByteArrayOutputStream();
                 try (InputStream is = conn.getInputStream()) {
-                    byte[] buf = new byte[4096];
-                    int n;
-                    while ((n = is.read(buf)) > 0) {
-                        out.write(buf, 0, n);
-                    }
+                    return new JSONObject(readAll(is)).optBoolean("active", false);
                 }
-                return new JSONObject(out.toString("UTF-8")).optBoolean("active", false);
             } catch (Exception e) {
                 return null;
             } finally {
@@ -1557,6 +1623,17 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public String getPlatform() {
             return "android";
+        }
+
+        // This install's id and name, sent when signing in (the devices list).
+        @JavascriptInterface
+        public String getDeviceId() {
+            return deviceId();
+        }
+
+        @JavascriptInterface
+        public String getDeviceName() {
+            return deviceName();
         }
 
         // In-app updates. The answers come back through window.mkflixUpdateState,
