@@ -2,7 +2,7 @@
 
 App built by **Blendy Studio (MK)**.
 
-## 🎬 Blendy Play — v1.5.1
+## 🎬 Blendy Play — v1.6.0
 
 Blendy Play is an Android, Android TV and desktop app for watching films and
 shows in their own fullscreen window, without the ads and pop-ups.
@@ -14,8 +14,10 @@ Get the latest version from the **[Blendy Play website](https://blendy.mainakima
 | Platform | How to install |
 |---|---|
 | Android 7.0+ and Android TV / Google TV | Phone: open the APK and allow installing from that source when asked. TV: use the Downloader app or `adb` ([how](./mk-flix-app/README.md#installing)). |
-| Windows 10/11 (64-bit) | Run `Blendy-Play-Setup-1.5.1.exe`. If Windows warns you, choose **More info**, then **Run anyway** (the app isn't code-signed yet). |
-| Ubuntu/Debian (64-bit) | `sudo apt install ./Blendy-Play_1.5.1_amd64.deb`, then open Blendy Play from your apps menu. |
+| Windows 10/11 (64-bit) | Run `Blendy-Play-Setup-1.6.0.exe`. If Windows warns you, choose **More info**, then **Run anyway** (the app isn't code-signed yet). |
+| Ubuntu/Debian (64-bit) | `sudo apt install ./Blendy-Play_1.6.0_amd64.deb`, then open Blendy Play from your apps menu. |
+
+There is no version for iPhone, iPad or Mac yet.
 
 Once installed, the apps update themselves: at launch they check for a new
 version and offer to install it.
@@ -24,7 +26,9 @@ version and offer to install it.
 
 - **Your Blendy Play account.** Sign up with your email (confirmed with a
   4-digit code), reset a forgotten password, and manage your account at
-  [blendy.mainakimani.com](https://blendy.mainakimani.com/).
+  [blendy.mainakimani.com](https://blendy.mainakimani.com/). An account
+  can be signed in on up to 4 apps at once; the website lists them and
+  signs any of them out.
 - **Subscriptions with M-Pesa.** Choose a weekly or monthly plan and approve
   the M-Pesa prompt on your phone. Browsing is free; playing needs an active
   subscription. Nothing renews automatically.
@@ -82,6 +86,17 @@ python3 branding/make-icons.py   # needs Pillow
 ```
 
 ## Releases
+
+### v1.6.0
+
+- Your account can be signed in on up to 4 apps at once (phones, TVs
+  and computers). See them, and sign any of them out, under Devices on
+  the [website](https://blendy.mainakimani.com/account/devices).
+- Signing out in the app frees that device's place. A device signed out
+  from the website, or by a password change, goes back to sign-in.
+- Android: the app checks your subscription far less often, which keeps
+  Blendy Play quick and available for everyone.
+- Every app on an older version must update.
 
 ### v1.5.1
 

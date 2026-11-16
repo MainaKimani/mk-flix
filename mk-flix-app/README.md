@@ -9,7 +9,7 @@ updates.
   key), so it installs alongside it. Neither the id nor the key may change
   again, or updates stop installing. The Java package and `namespace` stay
   `com.w2a.um1c`; that's only the code's name.
-- Version: 1.5.1 (versionCode 151), set in `app/build.gradle.kts`
+- Version: 1.6.0 (versionCode 160), set in `app/build.gradle.kts`
 - Android 7.0 (API 24) and newer; targets and compiles against API 34
 
 ## What's where
@@ -83,6 +83,14 @@ APK, and hands it to Android's installer; see `../release/README.md`).
   cleartext HTTP only to the loopback hosts used to reach a local dev backend
   (`10.0.2.2` on the emulator, `127.0.0.1`/`localhost` via `adb reverse`); the
   production backend is HTTPS.
+- **Signed-in devices**: signing in sends this install's id (random, made
+  once and kept in `SharedPreferences`) and its name (the one set in
+  Android's settings, or maker and model), so the account's devices list
+  shows it and signing in again reuses its place. An account may have 4
+  apps signed in; a 5th is refused with a message to sign one out on the
+  website. Sign out in the gate frees the place. When the backend answers
+  `session_revoked` (signed out from the website or by a password change),
+  the app drops the session and shows the gate's sign-in.
 - **Playback gate**: browsing cinejoy.pk is free, but playback (a `/watch/`
   page) needs an active subscription. `assets/mkflix-enforcer.js`, injected into
   cinejoy pages, blocks navigation to a `/watch/` page when there's no
