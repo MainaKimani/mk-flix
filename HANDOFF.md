@@ -17,7 +17,7 @@ installs alongside MK-Flix. The code, repo names, the `MKFlixNative` bridge and
   - `mk-flix-desktop/` — Electron desktop app (Windows + Linux)
   - `branding/` — `make-icons.py` generates all icons, logos, splash and banner art
   - `docs/terms-and-conditions-draft.md` — the Terms and Conditions source text
-- **`mk-flix-be`** — https://github.com/MainaKimani/mk-flix-be (Django backend: auth, billing, M-Pesa, email, dashboard API). Lives at `../mk-flix-be`. **Confirm this repo is private.**
+- **`mk-flix-be`** — https://github.com/MainaKimani/mk-flix-be (Django backend: auth, billing, M-Pesa, email, dashboard API). Lives at `../mk-flix-be`. **Private** (keep it so); `mk-flix` and `blendy-play` are public.
 - **`blendy-play`** — https://github.com/MainaKimani/blendy-play (Angular 19 web portal: product page, customer account area, admin dashboard). Lives at `../blendy-play`. Deployed separately as a static site.
 
 ## What this product is
@@ -33,7 +33,113 @@ CineJoy (inside the app: the listing, then Settings, then Login) only carries
 their experience across devices. User-facing text must never say a CineJoy
 account is required, and must never point users at cinejoy.pk.
 
-## Latest sessions — 2026-11-13 (afternoon) and 2026-11-14
+## Latest sessions — 2026-11-15 and 2026-11-16
+
+- **Live with real customers.** M-Pesa runs on Safaricom's live Daraja API
+  and pays into a **Buy Goods till** (`mk-flix-be` `d335da2`): setting
+  `MPESA_TILL_NUMBER` sends `CustomerBuyGoodsOnline` with the till as
+  `PartyB`, while `MPESA_SHORTCODE` (the store number the passkey was issued
+  for) stays `BusinessShortCode`. Empty, it falls back to Paybill, which keeps
+  the sandbox (174379) working locally. **Symptom of a missing till number:**
+  result code 2029 "Failed due to an unresolved reason type" and no prompt on
+  the phone.
+- **Release 1.6.0 is out** (`mk-flix` `ccf6ff6`), with `--min 1.6.0`, and the
+  server's `MIN_APP_VERSION_*` are set, so 1.5.x apps get Update required.
+  Before it: **1.5.0** (`634a4f0`, the first Blendy Play release) and
+  **1.5.1** (`a348287`: the splash covers the hand-off to the site, `e716107`;
+  the footer is just the logo and "Blendy Play: Powered by CineJoy",
+  `3d67242`). Also since 1.5.0: on a TV films start by themselves with the
+  player's overlays hidden until a remote key (`f2d667f`); the gate's card
+  scrolls when it's taller than the window (`f652cd4`). Windows is built in
+  podman (`635f268`, see "Releases").
+- **Four apps per account** (`mk-flix-be` `916e6df`, apps `38d5f9d`, portal
+  `4009902`): see "Devices" below.
+- **Staff roles** (`mk-flix-be` `4581c4c`, portal `8b23adf`): staff can view
+  the dashboard, super-admins change things and manage the team at
+  `/dashboard/staff`. See "Admin dashboard".
+- **The server went down twice** when apps opened (all of LiteSpeed's 8 web
+  processes busy). Causes and fixes:
+  - The Android app fired a `/me/subscription` request on every page change
+    once its cached answer was stale, and never stopped on failure
+    (`mk-flix` `f082a2e`): now one check at a time, backing off 1 → 15 min,
+    and no retry after 401/403 until the gate hands over a new session.
+  - Emails sent during the request waited up to 15 s for the mail server.
+    Now see "Sending email" below (`787d9da`, `4e75a7e`).
+  - Daraja calls waited 20 s; now 10 s (token, status) and 15 s (STK push);
+    a read timeout is "Could not start the M-Pesa payment" instead of a 500;
+    a successful callback matching no payment is logged as an error with
+    receipt, amount and phone so it can be credited by hand (`56bc351`).
+  - **Request logging** (`fe80159`): every API request logs a start and a
+    done line (status, total and database time, query count, user id) to
+    `stderr.log`; over `SLOW_REQUEST_MS` (2 s) is a warning; a start with
+    no done shows what a stuck process was doing. Only the path is logged.
+    `LOG_REQUESTS=False` turns it off.
+  - A cron request to `/api/plans` every 2 minutes keeps the app from being
+    stopped between requests (`c088786`), so launch checks don't wait for
+    Django to start.
+- **Portal:** prices KES 119 / 359 on the site (`e4c8552`); "no iPhone, iPad
+  or Mac app yet" note (`f193220`); an **Edit** button on each customer row
+  in the dashboard (`9d663b7`: the name link didn't look clickable).
+- **Open:** a customer who registered and paid on 2026-11-16 said neither the
+  code nor the receipt arrived. The server log shows both were accepted by
+  the mail server (the code timed out inline and went out from the queue; the
+  admin confirmed the email by hand in the dashboard). Next step: cPanel →
+  Email → **Track Delivery** for their address (bounced → wrong address;
+  delivered → their spam folder). A receipt can be resent from
+  `manage.py shell` with `payments.services.settlement._send_receipt(payment,
+  payment.subscription)`.
+
+## Devices
+
+- **Every sign-in starts a `DeviceSession`** (`accounts/models.py`), and the
+  tokens carry its id as `sid`. A token works only while that session is
+  signed in and was used in the last `DEVICE_IDLE_DAYS` (30); otherwise 401
+  `{"code": "session_revoked"}` (`accounts/authentication.py`). Tokens from
+  before this had no `sid`, so everyone signed in once more after the deploy.
+- **The apps** send `X-App-Platform`, a random `device_id` made once per
+  install, and a `device_name` (Android: the name set in Settings, else maker
+  and model; desktop: computer name and system). Signing in again on a known
+  device reuses its session.
+- **Limit:** `MAX_APP_DEVICES` (4) signed-in apps. The 5th sign-in gets 403
+  `device_limit` with the signed-in devices' names and a pointer to the
+  portal's devices page; the gate shows both. Portal (browser) sessions are
+  listed but never count. Superusers have no limit.
+- **Signing out:** the apps call `POST /api/auth/logout` first. Customers see
+  and sign out devices on `/account` (`GET /api/auth/me/devices`, `DELETE
+  /api/auth/me/devices/<id>`); the dashboard's customer page lists theirs with
+  a Sign out button (`DELETE /api/dashboard/users/<id>/devices/<device id>`).
+  On `session_revoked` the gate clears the session and shows sign-in with the
+  reason; the Android background check does the same, and the desktop app
+  re-checks every 10 minutes, so a signed-out device stops playback without a
+  restart.
+- **Passwords:** a change signs out the other devices, a reset (and deleting
+  the account) signs out all of them. Asking for a reset signs nothing out.
+- `last_seen_at` is written at most every 5 minutes per device.
+- **Not yet tried on real devices:** the desktop flow at the limit and the
+  Android device name set in Settings.
+
+## Sending email
+
+- **Codes and reset links** go out during the request, waiting at most
+  `EMAIL_TIMEOUT` (default 5 s). One that fails or times out is stored
+  rendered in `QueuedEmail` and retried by `manage.py send_queued_emails`
+  (cron, every minute) after 1, 2, 5, 15 and 30 minutes; expired codes and
+  links are dropped. Rows are deleted once sent or dropped.
+- **Receipts, welcome, "password changed" and staff invites** never wait in a
+  request: `send_email(..., queue=True)` queues them and the cron job sends
+  them on its next run, waiting up to `EMAIL_QUEUE_TIMEOUT` (60 s) each
+  (`4e75a7e`). The job writes timestamped lines to `email.log` only when it
+  had something to do (`4f9447f`).
+- **The mail server takes 4.5–7 s to accept a message** (connect and login
+  take 0.1 s; the rest is likely its outgoing scan), so many codes miss the
+  5 s and arrive a minute later from the queue. Suggested on the server:
+  `EMAIL_TIMEOUT=20` in `.env`, then Restart (not yet confirmed done).
+- **`EMAIL_SEND_IN_BACKGROUND=False` must stay in the server's `.env`.**
+  LiteSpeed freezes the app between requests, threads included, so a
+  background send only went out on the next request. The setting defaults to
+  True when the line is missing.
+
+## Sessions — 2026-11-13 (afternoon) and 2026-11-14
 
 - **Deployed** (2026-11-14): the backend runs on the cPanel host at
   `https://blendyplay.mainakimani.com` (see "Deployment" below); the gate's
@@ -99,6 +205,12 @@ account is required, and must never point users at cinejoy.pk.
 ## Commits (newest first)
 
 blendy-play commits:
+- `9d663b7` Edit button on each customer row in the dashboard
+- `f193220` "no iPhone, iPad or Mac app yet" on the product page
+- `8b23adf` staff roles: view-only dashboard for staff, `/dashboard/staff` for super-admins
+- `4009902` signed-in devices on `/account`, with Sign out
+- `e4c8552` new weekly and monthly prices on the site
+- `1173b59` gallery shows email verification and the listing
 - `8334b78` editable customer page (details, subscription) and a Plans page
 - `2b6da62` interceptor matches token-free paths exactly (`/dashboard/plans` was sent without a token)
 - `afd93c5` payment search hint mentions the receipt reference
@@ -109,6 +221,17 @@ blendy-play commits:
 - `74de4d8` the portal: product page, sign-in, account area, admin dashboard
 
 mk-flix commits:
+- `ccf6ff6` release 1.6.0
+- `38d5f9d` apps register the device at sign-in; device limit and remote sign-out handled
+- `f082a2e` Android: one subscription check at a time, with back-off
+- `a348287` release 1.5.1
+- `e716107` splash covers the hand-off from the gate to the site
+- `3d67242` footer reduced to the logo and app name
+- `635f268` release docs: keep only the latest version, Windows in podman
+- `634a4f0` release 1.5.0
+- `a725be6` terms: KES 119 weekly, 359 monthly
+- `f2d667f` TV: films start by themselves, overlays hidden until a key
+- `f652cd4` gate: a tall card scrolls
 - `fdc07c7` gate's built-in backend is `https://blendyplay.mainakimani.com/api`
 - `61481a7` in-app updates from a signed release manifest; `release/publish.mjs`
 - `8c25d24` own app identity (Android id + key, desktop id/package/data folder, Windows installer)
@@ -130,6 +253,15 @@ mk-flix commits:
 - `7aada6f` the account gate (onboarding + M-Pesa paywall) wired into both apps
 
 mk-flix-be commits:
+- `4f9447f` timestamps on the queued email log
+- `4e75a7e` receipts, welcome, "password changed" and invites sent from the queue (190 tests)
+- `d335da2` M-Pesa Buy Goods till (`MPESA_TILL_NUMBER`)
+- `4581c4c` staff roles and the staff API
+- `916e6df` device sessions: 4 signed-in apps per account, remote sign-out
+- `fe80159` per-request logging with timings
+- `56bc351` shorter Daraja waits; unmatched callbacks logged
+- `787d9da` failed emails queued and retried by cron
+- `c088786` / `2f8c7f8` deploy guide: keep-awake cron; emails sent during the request
 - `3a1fef2` admin editing of customers, subscriptions and plans (132 tests)
 - `f91ffae` the bare domain redirects to the portal
 - `c53460b` cPanel deploy: `passenger_wsgi.py`, WhiteNoise, production checks, SQLite IMMEDIATE transactions, `DEPLOY.md` (117 tests)
@@ -194,15 +326,16 @@ a cinejoy page/ad can't fake a subscription:
 - `accounts` — email-login `CustomUser` (`email_verified_at`); `EmailVerificationCode` + `accounts/verification.py` for the 4-digit code; `PasswordResetToken` + `accounts/password_reset.py` for forgot password; passwords need 6+ characters, not all numbers, not common, not like the email; CineJoy number **encrypted at rest** (Fernet, `FIELD_ENCRYPTION_KEY`); self-service profile/password/delete (`accounts/services.py` erases the person but keeps payments as anonymous records).
 - `billing` — `Plan` (seeded **Weekly**/**Monthly**), per-user `Subscription` (renewals extend it).
 - `payments` — `Payment` (with `terms_version`) + `MpesaTransaction`, STK Push, token-authenticated callback, idempotent settle, `reconcile_payments` command.
-- `notifications` — `send_email(name, to, context)`: templates in `notifications/templates/emails/<name>/` (subject, text, HTML on a shared layout), sent after commit in a background thread; failures are logged, not retried. Emails: `verify_email`, `welcome`, `password_reset`, `password_changed`, `payment_receipt`.
-- `dashboard` — read-only admin API (see below).
+- `notifications` — `send_email(name, to, context, queue=…)`: templates in `notifications/templates/emails/<name>/` (subject, text, HTML on a shared layout); `QueuedEmail` + `send_queued_emails` for retries and queued sends (see "Sending email"). Emails: `verify_email`, `welcome`, `password_reset`, `password_changed`, `payment_receipt`, `staff_invite`.
+- `dashboard` — admin API: staff read, super-admins write (see below).
+- `mkflix_be/request_log.py` — the per-request log lines.
 - `CACHES` is the **database cache** (table created by a payments migration), shared by all processes; it holds the Daraja token.
 - Endpoints:
-  - Auth: `POST /api/auth/{register,login,refresh}`; `POST /api/auth/password-reset` (`{email}`), `/password-reset/check` (`{token}`), `/password-reset/confirm` (`{token, new_password}`), all without sign-in; `POST /api/auth/verify-email` (`{code}`) and `/api/auth/verify-email/resend`; `GET/PATCH/DELETE /api/auth/me` (PATCH: name, phone; DELETE needs `{password}`; response has `is_admin`); `POST /api/auth/me/password`; `GET/PUT/DELETE /api/auth/me/cinejoy-account`.
+  - Auth: `POST /api/auth/{register,login,refresh,logout}` (login/register take `device_id`, `device_name`); `GET /api/auth/me/devices`, `DELETE /api/auth/me/devices/<id>`; `POST /api/auth/password-reset` (`{email}`), `/password-reset/check` (`{token}`), `/password-reset/confirm` (`{token, new_password}`), all without sign-in; `POST /api/auth/verify-email` (`{code}`) and `/api/auth/verify-email/resend`; `GET/PATCH/DELETE /api/auth/me` (PATCH: name, phone; DELETE needs `{password}`; response has `is_admin` = can open the dashboard, `is_superadmin`); `POST /api/auth/me/password`; `GET/PUT/DELETE /api/auth/me/cinejoy-account`.
   - Billing: `GET /api/plans`, `GET /api/me/subscription` (403 `email_not_verified` until the email is verified).
   - Payments: `POST /api/payments/mpesa/stk` (`plan_code`, `phone_number`, `terms_version`; verified accounts only), `GET /api/payments/<id>`, `GET /api/payments/mine`, `POST /api/payments/stk/callback/<token>` (also `/api/payments/mpesa/callback/<token>`).
-  - Dashboard (super-admin only): `GET /api/dashboard/{overview,users,users/<id>,payments,subscriptions}`.
-- Config in `mk-flix-be/.env` (gitignored; `.env.example` documents it). Access tokens 60 min, refresh 30 days. simplejwt is stateless: a password change doesn't sign out other devices until their tokens expire; deleted (inactive) accounts are rejected at once.
+  - Dashboard (staff read, super-admin write): `GET /api/dashboard/{overview,users,users/<id>,payments,subscriptions}`, editing endpoints, `DELETE /api/dashboard/users/<id>/devices/<device id>`, `GET/POST /api/dashboard/staff`, `PATCH/DELETE /api/dashboard/staff/<id>`.
+- Config in `mk-flix-be/.env` (gitignored; `.env.example` documents it). Access tokens 60 min, refresh 30 days, both tied to a device session (see "Devices"), so signing a device out takes effect at once; deleted (inactive) accounts are rejected at once.
 
 ## Web portal (`blendy-play`)
 
@@ -215,8 +348,8 @@ the gate (pure black, the mark's cyan/magenta/red, Ubuntu font).
 | `/signin`, `/admin` | Everyone | One sign-in. The admin lands on `/dashboard`; anyone else on `/account` |
 | `/forgot-password`, `/reset-password` | Everyone | Ask for a reset link; the emailed link lands on `/reset-password?token=…` to set a new password |
 | `/verify` | Signed in, email not verified | Enter the 4-digit code; `/account` redirects here until it's done |
-| `/account` | Any signed-in user | Own subscription, editable details, own payments, change password, delete account |
-| `/dashboard` | Super-admin only | Overview, Users, Payments, Subscriptions |
+| `/account` | Any signed-in user | Own subscription, editable details, signed-in devices, own payments, change password, delete account |
+| `/dashboard` | Staff (view) and super-admins | Overview, Users, Payments, Subscriptions, Plans; Staff for super-admins |
 
 - **Config at load time:** `public/config.json` (`apiBase`, `supportEmail`), so
   one build deploys against any backend.
@@ -252,18 +385,24 @@ backend). Step-by-step guide: `mk-flix-be/DEPLOY.md`.
   `blendyplay.mainakimani.com` (with `https://` in the CSRF one);
   `CORS_ALLOWED_ORIGINS=https://blendy.mainakimani.com` (the portal is
   another origin); `PORTAL_URL=https://blendy.mainakimani.com`;
-  `POSTGRES_DB` empty (SQLite); M-Pesa still on sandbox credentials.
+  `POSTGRES_DB` empty (SQLite); live M-Pesa (`MPESA_BASE_URL`, keys,
+  `MPESA_SHORTCODE` = store number, `MPESA_TILL_NUMBER`, passkey);
+  `EMAIL_SEND_IN_BACKGROUND=False`; `MIN_APP_VERSION_*=1.6.0`.
 - **Database:** SQLite, `~/blendyplay/db.sqlite3`. SQLite ignores
   `select_for_update()`, so transactions run in `IMMEDIATE` mode to stop the
   callback and the reconcile job settling a payment twice. To move to
   PostgreSQL/MySQL later: `dumpdata`, set the database in `.env`, `migrate`,
   `loaddata`.
-- **Cron:** `reconcile_payments` every 5 minutes; a daily SQLite backup
-  (Python `sqlite3` backup API) into `~/blendyplay-backups`, keeping 14 days.
+- **Cron:** `reconcile_payments` every 5 minutes (`reconcile.log`);
+  `send_queued_emails` every minute (`email.log`); a `curl` of `/api/plans`
+  every 2 minutes to keep the app running; a daily SQLite backup (Python
+  `sqlite3` backup API) into `~/blendyplay-backups`, keeping 14 days.
   Commands are in `DEPLOY.md` step 7.
 - **Static files:** WhiteNoise under `/api/static/`; run `collectstatic`
   after every backend update, then Restart on the Python App page.
-- **Errors:** `~/blendyplay/stderr.log`.
+- **Logs:** `~/blendyplay/stderr.log` (errors and every API request, with
+  times and process ids), `email.log`, `reconcile.log`. A changed management
+  command needs only the upload; app code needs Restart.
 - **Deploy package** (built locally, not in git): `~/Desktop/blendy-play-deploy/`
   with `blendyplay-api.zip` (repo files + a production `.env`), `portal.zip`
   (build + production `config.json`) and `DEPLOY.md`.
@@ -312,14 +451,24 @@ backend). Step-by-step guide: `mk-flix-be/DEPLOY.md`.
   stripped from the address bar once read, and the portal sends no referrer.
 - **After a reset:** the link is used up, the email counts as verified, and a
   "Your password was changed" email goes out. The same email (worded "from
-  your account settings") follows a change from `/account` (`808c9eb`). Other signed-in sessions are not
-  ended (stateless JWTs) until their tokens expire.
+  your account settings") follows a change from `/account` (`808c9eb`). A
+  change signs out the other devices; a reset signs out all of them.
 
 ## Admin dashboard
 
-- **Who:** only accounts with `is_superuser` (`python manage.py
-  createsuperuser`). The backend returns 403 to everyone else, and the portal
-  sends non-admins to `/account`. Staff accounts are excluded from all figures.
+- **Who:** **super-admins** (`is_superuser`) see and change everything;
+  **staff** (`is_staff` only) see the whole dashboard but every write
+  answers 403. Everyone else gets 403 and the portal sends them to
+  `/account`. Staff accounts are excluded from all figures.
+- **Staff page** (`/dashboard/staff`, super-admins only;
+  `mk-flix-be/dashboard/staff.py`): add by email as staff or super-admin,
+  rename, change role, suspend, or remove (back to a customer, account
+  kept). An email with no account gets one (email confirmed, no password)
+  and a `staff_invite` email whose single-use link (`STAFF_INVITE_TTL_HOURS`,
+  72) leads to the portal's choose-a-password page. Nobody can change their
+  own role or suspend/remove themselves, and the last active super-admin
+  can't be demoted. The first super-admin still comes from `python manage.py
+  createsuperuser`.
 - **Overview:** a 7/30/90-day window with revenue (vs the previous window, plus
   all time), active subscriptions, new users, the share of finished payments
   that went through; daily revenue and new-user bar charts (each with a table
@@ -375,12 +524,14 @@ backend). Step-by-step guide: `mk-flix-be/DEPLOY.md`.
   `~/keys/blendy-play-release.jks` (password in `~/.gradle/gradle.properties`,
   `BLENDY_RELEASE_*`). The old MK-Flix keystore `~/keys/mkflix-release.jks`
   stays for reference only.
-- **Windows build needs Wine** on this Linux machine (`sudo apt install wine`):
-  electron-builder's NSIS target runs Windows tools.
-- **Not yet tested on a device:** the Android install step (no phone/TV was
-  connected) and the Windows installer (no Wine yet). Manifest signing,
-  verification (Node and Java), downloads, tamper checks and the gate screens
-  are tested.
+- **Windows build runs in podman** (`electronuserland/builder:wine`): 32-bit
+  Wine can't be installed on this machine (apt offers to remove the desktop;
+  don't accept). Steps in `release/README.md`.
+- **Only the latest version is offered:** delete the previous version's
+  folder on the server once the new manifest is up (1.5.0 and 1.5.1 folders:
+  removal not confirmed).
+- **In the field:** 1.6.0 apps on Android and Linux have checked in, and 1.5.1
+  apps got 426 Update required, so the update path works.
 
 ## The rename
 
@@ -391,7 +542,7 @@ Android application id (`com.mainakimani.blendyplay`), signing key, desktop
 app id, Linux package (`blendy-play`) and desktop data folder are new too.
 Kept on purpose: the Java package / `namespace` `com.w2a.um1c`, the
 `MKFlixNative` bridge, `mkflix_*` storage keys, file names and repo names.
-- The main `README.md` describes Blendy Play 1.5.0 and points downloads at
+- The main `README.md` describes the current release (1.6.0) and points downloads at
   the website; the MK-Flix release history (v1.2.7 to v1.4.0) was taken out
   of it with that release.
 
@@ -441,32 +592,21 @@ For local testing: `MKFLIX_API_BASE=http://localhost:8000/api npm start`.
 
 ## Not done yet / next steps
 
-- **Email:** sending works (SPF, DKIM, DMARC pass): verification code,
-  welcome, password reset, password changed and payment receipt.
-- **Finish the deploy:** the backend is live (checked: `/api/plans`, admin
-  with its CSS, CORS for the portal). Still to do: upload `portal.zip` to
-  `blendy.mainakimani.com`, add the two cron jobs, upload the root redirect
-  (`mkflix_be/urls.py`) and the dashboard editing (`3a1fef2`: run `migrate`
-  for its new column), and run `DEPLOY.md` step 8 end to end.
-- **Go live with M-Pesa:** Safaricom approval, live keys/shortcode/passkey,
-  `MPESA_BASE_URL=https://api.safaricom.co.ke`, the deployed callback, the IP
-  allowlist with `MPESA_WEBHOOK_ENFORCE_IP=True`, prices restored. **Open
-  question — Paybill or Till?** STK is hard-coded as `CustomerPayBillOnline`
-  with `PartyB` = shortcode; a Till needs `CustomerBuyGoodsOnline` and separate
-  settings in `payments/services/providers/mpesa.py`.
-- **First Blendy Play release:** install Wine, follow `release/README.md`
-  (bump to 1.5.0 / versionCode 150), set up the subdomain with HTTPS, upload,
-  and rename the main README. Existing MK-Flix users install Blendy Play once
-  by hand (it's a separate app); from then on it updates itself.
-- **Test updates on real devices:** an Android phone/TV (install prompt,
-  "allow installs" step) and Windows (silent install + restart).
-- **Confirm in the running apps:** the gate routing (`326f978`) and the terms
-  checkbox.
-- **Sandbox cancel test:** decline the STK prompt → payment FAILED, no subscription.
+- **The customer whose emails didn't arrive:** Track Delivery in cPanel, then
+  resend the receipt if needed (see "Latest sessions").
+- **`EMAIL_TIMEOUT=20`** in the server's `.env` + Restart, so most codes go
+  out at once instead of a minute later from the queue.
+- **Upload `notifications/management/commands/send_queued_emails.py`**
+  (`4f9447f`, log timestamps) if not done; no Restart needed.
+- **Delete the 1.5.0 / 1.5.1 folders** from `downloads/` on the server.
+- **Try on real devices:** the 5th-device refusal and remote sign-out on the
+  desktop app; the Android device name from Settings; Android and Windows
+  self-updates (1.6.0 → next).
 - **Terms:** lawyer review before relying on them.
-- **Customer email change** isn't possible yet (needs the code flow sent to the new address).
-- **Confirm on Android:** registering → code screen → paywall, and "Forgot your password?" (both confirmed on desktop).
-- **Confirm `mk-flix-be` is private.**
+- **Customer email change** isn't possible yet (needs the code flow sent to
+  the new address).
+- **SQLite → PostgreSQL/MySQL** once the host has PostgreSQL 14+ or traffic
+  grows (see "Deployment").
 
 ## Caveats worth re-reading
 
@@ -476,5 +616,5 @@ For local testing: `MKFLIX_API_BASE=http://localhost:8000/api npm start`.
 
 ## Where the raw session lives
 
-- Local transcripts (this machine), in `~/.claude/projects/-home-mk-dev-mk-flix/`: `01f7c073-67e5-47d5-8b14-f5a1d2d22235.jsonl` (the build-out) and `e7756eab-d8b0-46a7-bc93-1720d74eb355.jsonl` (2026-11-13 → 14: CORS, M-Pesa sandbox, gate fixes, rename, terms, email, portal and dashboard, email verification, forgot password). On the same machine, `claude --resume` lists past sessions and `claude -c` continues the most recent.
+- Local transcripts (this machine), in `~/.claude/projects/-home-mk-dev-mk-flix/`: `01f7c073-67e5-47d5-8b14-f5a1d2d22235.jsonl` (the build-out) and `e7756eab-d8b0-46a7-bc93-1720d74eb355.jsonl` (2026-11-13 → 16: CORS, M-Pesa sandbox, gate fixes, rename, terms, email, portal and dashboard, email verification, forgot password, releases 1.5.0–1.6.0, outages and logging, devices, staff, live till payments, the email queue). On the same machine, `claude --resume` lists past sessions and `claude -c` continues the most recent.
 - On a different machine, this file + the three GitHub repos are the handoff.
