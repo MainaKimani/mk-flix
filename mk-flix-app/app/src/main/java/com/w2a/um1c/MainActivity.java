@@ -69,6 +69,7 @@ import java.net.URL;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class MainActivity extends Activity {
 
@@ -1337,14 +1338,30 @@ public class MainActivity extends Activity {
      * there. The answer is cached and persisted, read synchronously by the
      * enforcer, and refreshed in the background once it's stale, or when the
      * gate asks after a payment (refreshSubscription).
+     *
+     * The enforcer and the poster padlocks ask on every change to the page,
+     * many times a second, so a background check must never multiply: only
+     * one runs at a time, a failed one waits before the next (1 minute,
+     * doubling to 15), and a rejected session (401/403) isn't retried until
+     * the gate hands over a new one. Without this, a stale answer plus a slow
+     * or failing backend sent a request per page change and could take up
+     * every one of the server's web processes.
      */
     private final class Subscription {
         private static final String PREFS = "mkflix";
         // Re-check in the background if the cached answer is older than this.
         private static final long STALE_MS = 10 * 60 * 1000;
+        // Wait after a failed check, doubling each time up to the maximum.
+        private static final long RETRY_MIN_MS = 60 * 1000;
+        private static final long RETRY_MAX_MS = 15 * 60 * 1000;
 
         private volatile boolean active;
         private volatile long checkedAt;
+        private final AtomicBoolean inFlight = new AtomicBoolean(false);
+        private volatile long retryAt;
+        private volatile long retryDelay = RETRY_MIN_MS;
+        // The backend refused this session; wait for the gate to send a new one.
+        private volatile boolean rejected;
         private String apiBase = "";
         private String access = "";
         private String refresh = "";
@@ -1370,6 +1387,9 @@ public class MainActivity extends Activity {
             this.apiBase = apiBase == null ? "" : apiBase;
             this.access = access == null ? "" : access;
             this.refresh = refresh == null ? "" : refresh;
+            rejected = false;
+            retryAt = 0;
+            retryDelay = RETRY_MIN_MS;
             persist();
         }
 
@@ -1390,31 +1410,51 @@ public class MainActivity extends Activity {
         }
 
         boolean isActive() {
-            if (!apiBase.isEmpty() && !access.isEmpty()
-                    && System.currentTimeMillis() - checkedAt > STALE_MS) {
+            long now = System.currentTimeMillis();
+            if (now - checkedAt > STALE_MS && now >= retryAt && !rejected) {
                 refreshAsync(); // non-blocking; the cached value is returned now
             }
             return active;
         }
 
+        /** Check with the backend in the background, unless a check is already running. */
         void refreshAsync() {
             final String base = apiBase;
             final String token = access;
-            if (base.isEmpty() || token.isEmpty()) {
+            if (base.isEmpty() || token.isEmpty() || !inFlight.compareAndSet(false, true)) {
                 return;
             }
             new Thread(() -> {
-                Boolean result = fetchActive(base, token);
-                if (result != null) {
-                    active = result;
-                    checkedAt = System.currentTimeMillis();
-                    persist();
+                try {
+                    int[] status = new int[1];
+                    Boolean result = fetchActive(base, token, status);
+                    if (result != null) {
+                        active = result;
+                        checkedAt = System.currentTimeMillis();
+                        retryDelay = RETRY_MIN_MS;
+                        persist();
+                    } else {
+                        // 401/403: the session is no good; a retry would get
+                        // the same answer. Anything else: back off.
+                        if (status[0] == 401 || status[0] == 403) {
+                            rejected = true;
+                        }
+                        retryAt = System.currentTimeMillis() + retryDelay;
+                        retryDelay = Math.min(retryDelay * 2, RETRY_MAX_MS);
+                    }
+                } finally {
+                    inFlight.set(false);
                 }
             }).start();
         }
 
-        /** GET {base}/me/subscription; the `active` flag, or null on any error. */
-        private Boolean fetchActive(String base, String token) {
+        /**
+         * GET {base}/me/subscription: the `active` flag, or null on any
+         * failure, with the HTTP status in status[0] (0 if there was no
+         * answer). A failure never becomes "not subscribed": a transient blip
+         * or an expired access token mustn't lock out a real subscriber.
+         */
+        private Boolean fetchActive(String base, String token, int[] status) {
             HttpURLConnection conn = null;
             try {
                 conn = (HttpURLConnection) new URL(base + "/me/subscription").openConnection();
@@ -1424,10 +1464,8 @@ public class MainActivity extends Activity {
                 conn.setRequestProperty("X-App-Platform", "android");
                 conn.setConnectTimeout(15000);
                 conn.setReadTimeout(15000);
-                if (conn.getResponseCode() != 200) {
-                    // 401/5xx/offline: don't turn a previously-good answer to
-                    // false on a transient blip or an expired access token; the
-                    // gate re-checks and re-sends the session each time it runs.
+                status[0] = conn.getResponseCode();
+                if (status[0] != 200) {
                     return null;
                 }
                 ByteArrayOutputStream out = new ByteArrayOutputStream();
