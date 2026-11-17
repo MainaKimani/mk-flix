@@ -123,6 +123,9 @@ public class MainActivity extends Activity {
     // Hides CineJoy's "all issues fixed, no ads, 4K" announcement popup
     // (assets/mkflix-notice.js).
     private String noticeJs = "";
+    // "Still watching?" after 90 idle minutes of autoplay, and the card at the
+    // end of a film (assets/mkflix-player.js).
+    private String playerJs = "";
     private final Subscription subscription = new Subscription();
 
     // In-app updates (see AppUpdater). pageUrl lets the bridge serve update
@@ -194,6 +197,7 @@ public class MainActivity extends Activity {
         menuJs = readAsset("mkflix-menu.js");
         lockJs = readAsset("mkflix-lock.js");
         noticeJs = readAsset("mkflix-notice.js");
+        playerJs = readAsset("mkflix-player.js");
         apiBaseConfig = readConfigValue("apiBase");
         updater = new AppUpdater(this, readConfigValue("updateUrl"));
         installReceiver = AppUpdater.installStatusReceiver(this, message -> sendUpdateResult(false, null, message));
@@ -414,6 +418,9 @@ public class MainActivity extends Activity {
                         }
                         if (!noticeJs.isEmpty()) {
                             view.evaluateJavascript(noticeJs, null);
+                        }
+                        if (!playerJs.isEmpty()) {
+                            view.evaluateJavascript(playerJs, null);
                         }
                     }
                 } catch (Exception ignored) {

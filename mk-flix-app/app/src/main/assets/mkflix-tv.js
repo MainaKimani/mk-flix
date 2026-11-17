@@ -273,6 +273,8 @@
     var vr = v.getBoundingClientRect();
     function mark(el) {
       if (el.hasAttribute('data-mkf-chrome') || /^(STYLE|SCRIPT|LINK|META)$/.test(el.tagName)) return;
+      // Blendy Play's own cards (mkflix-player.js) are never player chrome.
+      if (el.id && el.id.indexOf('mkflix') === 0) return;
       if (!overlaps(el.getBoundingClientRect(), vr)) return;
       if (!(el.matches(INTERACTIVE) || el.querySelector(INTERACTIVE))) return;
       if (el.matches(CAPTION)) return;
@@ -318,6 +320,8 @@
     var tries = 0, started = false;
     function attempt() {
       if (started || startedFor !== v || !document.contains(v) || !onWatchPage()) return;
+      // mkflix-player.js is holding playback for "Still watching?".
+      if (window.__mkflixHold) return;
       if (!v.paused) { started = true; hideChrome(); return; }
       var p = v.play();
       if (p && p.catch) p.catch(function () {

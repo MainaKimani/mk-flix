@@ -112,6 +112,8 @@ const menuJs = readOptional('mkflix-menu.js');
 const lockJs = readOptional('mkflix-lock.js');
 // Hides CineJoy's "all issues fixed, no ads, 4K" announcement popup.
 const noticeJs = readOptional('mkflix-notice.js');
+// "Still watching?" after 90 idle minutes of autoplay, and the end-of-film card.
+const playerJs = readOptional('mkflix-player.js');
 ipcMain.on('mkflix:logo-css', (event) => {
   event.returnValue = logoCss;
 });
@@ -368,6 +370,7 @@ app.on('web-contents-created', (_event, contents) => {
       if (menuJs) contents.executeJavaScript(menuJs).catch(() => {});
       if (lockJs) contents.executeJavaScript(lockJs).catch(() => {});
       if (noticeJs) contents.executeJavaScript(noticeJs).catch(() => {});
+      if (playerJs) contents.executeJavaScript(playerJs).catch(() => {});
     }
   });
   // A page that fails to load would leave a blank black window, so show
