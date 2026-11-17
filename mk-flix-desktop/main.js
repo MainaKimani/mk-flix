@@ -110,6 +110,8 @@ const enforcerJs = readOptional('mkflix-enforcer.js');
 const menuJs = readOptional('mkflix-menu.js');
 // Golden padlock on each poster while there's no active subscription.
 const lockJs = readOptional('mkflix-lock.js');
+// Hides CineJoy's "all issues fixed, no ads, 4K" announcement popup.
+const noticeJs = readOptional('mkflix-notice.js');
 ipcMain.on('mkflix:logo-css', (event) => {
   event.returnValue = logoCss;
 });
@@ -338,6 +340,7 @@ app.on('web-contents-created', (_event, contents) => {
       if (enforcerJs) contents.executeJavaScript(enforcerJs).catch(() => {});
       if (menuJs) contents.executeJavaScript(menuJs).catch(() => {});
       if (lockJs) contents.executeJavaScript(lockJs).catch(() => {});
+      if (noticeJs) contents.executeJavaScript(noticeJs).catch(() => {});
     }
   });
   // A page that fails to load would leave a blank black window, so show

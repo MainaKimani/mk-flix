@@ -117,6 +117,9 @@ public class MainActivity extends Activity {
     private String menuJs = "";
     // Golden padlock on each poster while unsubscribed (assets/mkflix-lock.js).
     private String lockJs = "";
+    // Hides CineJoy's "all issues fixed, no ads, 4K" announcement popup
+    // (assets/mkflix-notice.js).
+    private String noticeJs = "";
     private final Subscription subscription = new Subscription();
 
     // In-app updates (see AppUpdater). pageUrl lets the bridge serve update
@@ -185,6 +188,7 @@ public class MainActivity extends Activity {
         enforcerJs = readAsset("mkflix-enforcer.js");
         menuJs = readAsset("mkflix-menu.js");
         lockJs = readAsset("mkflix-lock.js");
+        noticeJs = readAsset("mkflix-notice.js");
         apiBaseConfig = readConfigValue("apiBase");
         updater = new AppUpdater(this, readConfigValue("updateUrl"));
         installReceiver = AppUpdater.installStatusReceiver(this, message -> sendUpdateResult(false, null, message));
@@ -292,6 +296,9 @@ public class MainActivity extends Activity {
                 if (!tvJs.isEmpty() && isCineJoyUrl(url)) {
                     view.evaluateJavascript(tvJs, null);
                 }
+                if (!noticeJs.isEmpty() && isCineJoyUrl(url)) {
+                    view.evaluateJavascript(noticeJs, null);
+                }
                 if (!enforcerJs.isEmpty() && isCineJoyUrl(url)) {
                     view.evaluateJavascript(enforcerJs, null);
                 }
@@ -397,6 +404,9 @@ public class MainActivity extends Activity {
                         }
                         if (!lockJs.isEmpty()) {
                             view.evaluateJavascript(lockJs, null);
+                        }
+                        if (!noticeJs.isEmpty()) {
+                            view.evaluateJavascript(noticeJs, null);
                         }
                     }
                 } catch (Exception ignored) {
