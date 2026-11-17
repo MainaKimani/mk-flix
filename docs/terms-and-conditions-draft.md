@@ -1,5 +1,9 @@
 # Blendy Play Terms and Conditions
 
+> **Not the live text.** The Terms users see are stored in the backend and
+> edited in the Django admin (see HANDOFF.md, "Terms in the gate"). This file
+> is the original draft, kept for its review notes.
+
 > **DRAFT — not yet in force.** Items in `[square brackets]` need a decision
 > before this is published. Have a lawyer qualified in Kenya review it before
 > users are asked to accept it.

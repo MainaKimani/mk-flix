@@ -176,7 +176,9 @@ account is required, and must never point users at cinejoy.pk.
 - **Terms and Conditions** before paying: the gate's paywall has an unticked
   checkbox and a terms view (`mk-flix` `297ba70`); the backend refuses an STK
   push without `terms_version` and stores it on the payment (`mk-flix-be`
-  `a007382`). Current wording is `TERMS_VERSION = "2026-11-15.1"` (refunds only
+  `a007382`). The wording now lives in the backend (see "Terms in the gate");
+it was seeded as `2026-11-17.1` with KES 149 weekly and 459 monthly. Earlier
+wording was `TERMS_VERSION = "2026-11-15.1"` (refunds only
   if we shut Blendy Play down, `67bc01d`; CineJoy account optional, `e8ebd78`;
   prices KES 119 weekly and 359 monthly). The draft still needs review by a
   lawyer qualified in Kenya.
@@ -304,9 +306,16 @@ the gate then sends the WebView/window to cinejoy.pk.
   app and waits until `MKFlixNative.isSubscribed()` is true (max 5 s).
 
 **Terms in the gate.** Pay is disabled until a plan is chosen and the terms box
-is ticked. The terms text is a **copy** of `docs/terms-and-conditions-draft.md`
-inside `mkflix-account.html`: when the wording changes, update both and bump
-`TERMS_VERSION`, which every STK request sends and the backend stores.
+is ticked. The live wording is in the backend database (`legal` app,
+`TermsVersion`), edited in the Django admin under "Terms and Conditions": tick
+the live version, "Start a new draft from the selected version", edit it
+(the page shows a preview), then "Publish the selected draft". Published
+versions are locked because payments store their name. `GET /api/terms` serves
+the newest published one; the gate loads it on the paywall and the Terms
+screen and sends its `version` as `terms_version` with each STK push. The
+portal shows the same text at `/terms`. The copy inside `mkflix-account.html`
+(with `TERMS_VERSION`) is only the offline fallback, so changing the terms
+needs no app build; refresh the fallback at a release if it has drifted.
 
 **Shared, injected scripts** (identical copies in `mk-flix-app/app/src/main/assets/`
 and `mk-flix-desktop/` — keep them byte-identical):

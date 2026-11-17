@@ -270,10 +270,11 @@
       <a class="link" id="logout-2">Sign out</a>
     </section>
 
-    <!-- terms and conditions. The text is copied from
-         docs/terms-and-conditions-draft.md (without its draft banner and the
-         notes after the rule). Change both together, and bump TERMS_VERSION
-         below whenever the wording changes. -->
+    <!-- terms and conditions. The live wording comes from the backend
+         (GET /api/terms; edited in the Django admin under "Terms and
+         Conditions") and replaces this text when the screen loads it. The
+         copy here is only for when the backend can't be reached: keep it
+         close to the live version, with TERMS_VERSION below naming it. -->
     <section data-view="terms" class="hidden">
       <h1>Terms and Conditions</h1>
       <div class="terms" id="terms-text" tabindex="0" role="document" aria-label="Terms and Conditions">
@@ -352,8 +353,10 @@
   var DEFAULT_API_BASE = "https://blendyplay.mainakimani.com/api";
   var CINEJOY_URL = "https://cinejoy.pk/";
   // Which wording of the Terms the user accepts when they tick the box; sent
-  // with each payment. Bump it whenever the terms text below changes.
+  // with each payment. This names the copy built into this page; once the
+  // live Terms load from the backend, termsVersion becomes theirs.
   var TERMS_VERSION = "2026-11-17.1";
+  var termsVersion = TERMS_VERSION;
 
   function apiBase() {
     try {
@@ -941,6 +944,7 @@
         list.appendChild(b);
       });
     }).catch(function () { list.innerHTML = ""; document.getElementById("pay-err").textContent = "Can't reach Blendy Play."; });
+    loadTerms();
     show("plans");
   }
 
@@ -963,8 +967,28 @@
   // subscription page (read only). Returning to the paywall uses show(), not
   // showPaywall(), so the chosen plan and phone number are kept.
   var termsReturn = "plans";
+
+  // Swap in the live Terms from the backend. The html is escaped server-side
+  // (mk-flix-be legal/render.py), so it goes in as is. Never swapped while
+  // the Terms are on screen from the payment page, so the version sent with
+  // a payment is always the text the user could last read. Offline, the built-in copy stays.
+  function loadTerms() {
+    request("/terms").then(function (r) {
+      var d = r.data;
+      if (!r.ok || !d || typeof d.html !== "string" || !d.html ||
+          !/^[A-Za-z0-9._-]{1,32}$/.test(d.version || "")) return;
+      if (d.version === termsVersion || (currentView() === "terms" && termsReturn === "plans")) return;
+      var when = "", m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d.last_updated || "");
+      if (m) when = new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+      document.getElementById("terms-text").innerHTML =
+        (when ? "<p><strong>Last updated:</strong> " + esc(when) + "</p>" : "") + d.html;
+      termsVersion = d.version;
+    }).catch(function () {});
+  }
+
   function openTerms(from) {
     termsReturn = from;
+    loadTerms();
     document.getElementById("terms-agree").classList.toggle("hidden", from !== "plans");
     show("terms");
     var text = document.getElementById("terms-text");
@@ -991,7 +1015,7 @@
     if (!phone) { err.textContent = "Enter your M-Pesa phone number."; return; }
     var btn = document.getElementById("pay-btn");
     btn.disabled = true;
-    authed("/payments/mpesa/stk", { method: "POST", body: { plan_code: selectedPlan.code, phone_number: phone, terms_version: TERMS_VERSION } }).then(function (r) {
+    authed("/payments/mpesa/stk", { method: "POST", body: { plan_code: selectedPlan.code, phone_number: phone, terms_version: termsVersion } }).then(function (r) {
       btn.disabled = false;
       if (r.ok && r.data && r.data.payment) {
         show("paying");
