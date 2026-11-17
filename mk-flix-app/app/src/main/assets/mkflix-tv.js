@@ -22,7 +22,8 @@
 //     so they stay visible.
 // Pointer mode (an on-screen cursor, toggled with a long press on OK) is
 // handled natively in MainActivity; it takes the arrow keys before they
-// reach the page.
+// reach the page. Two arrow presses in a row that move nothing are reported
+// to the app (MKFlixNative.tvStuck), whose banner then suggests the pointer.
 (function () {
   if (window.__mkflixTv) return;
   window.__mkflixTv = true;
@@ -206,6 +207,25 @@
     setTimeout(rememberPlace, 400);   // after the smooth scroll settles
   }
 
+  // Arrow presses in a row that moved nothing: no item that way, and no
+  // room to scroll. Two in a row is where the remote "hits the block" (the
+  // player's subtitle and settings menus, mostly), so the app shows its
+  // banner about pointer mode. The app decides whether it's still worth
+  // showing (once per page, and never once pointer mode is familiar).
+  var deadEnds = 0;
+  function noteDeadEnd() {
+    if (++deadEnds < 2) return;
+    deadEnds = 0;
+    try {
+      if (window.MKFlixNative && window.MKFlixNative.tvStuck) window.MKFlixNative.tvStuck(location.pathname);
+    } catch (e) { /* no bridge: nothing to show */ }
+  }
+
+  function canScroll(box, dir) {
+    if (!box) return false;
+    return dir === 'down' ? box.scrollTop + box.clientHeight < box.scrollHeight - 2 : box.scrollTop > 0;
+  }
+
   function scrollableParent(el) {
     for (var p = el && el.parentElement; p; p = p.parentElement) {
       var cs = getComputedStyle(p);
@@ -362,8 +382,12 @@
       var next = nearest(dir);
       if (next) {
         highlight(next, dir);
-      } else if (dir === 'up' || dir === 'down') {
+        deadEnds = 0;
+      } else if ((dir === 'up' || dir === 'down') && canScroll(scrollableParent(current), dir)) {
         scrollableParent(current).scrollBy({ top: (dir === 'down' ? 1 : -1) * innerHeight * 0.6, behavior: 'smooth' });
+        deadEnds = 0;
+      } else {
+        noteDeadEnd();
       }
       e.preventDefault(); e.stopImmediatePropagation();
       return;

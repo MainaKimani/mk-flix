@@ -23,6 +23,8 @@ import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.graphics.Shader;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.os.SystemClock;
 import android.view.Gravity;
 import android.view.KeyEvent;
@@ -55,6 +57,7 @@ import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import org.json.JSONObject;
@@ -138,6 +141,8 @@ public class MainActivity extends Activity {
     private boolean isTv;
     private String tvJs = "";
     private TvPointer pointer;
+    // Banner that teaches pointer mode and confirms it turning on and off.
+    private TvHint hint;
 
     private static final int REQUEST_STORAGE_PERMISSION = 1;
 
@@ -239,6 +244,8 @@ public class MainActivity extends Activity {
             pointer = new TvPointer(this);
             ((ViewGroup) webView.getParent()).addView(pointer, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            hint = new TvHint(this);
+            ((ViewGroup) webView.getParent()).addView(hint, hint.layoutParams());
             webView.setFocusable(true);
             webView.requestFocus();
         }
@@ -1270,14 +1277,159 @@ public class MainActivity extends Activity {
                     break;
             }
         }
+        // Browsing the site with the arrows: after a few presses, the first
+        // time ever, the banner says pointer mode exists.
+        if (action == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0 && isCineJoyUrl(pageUrl)
+                && (code == KeyEvent.KEYCODE_DPAD_UP || code == KeyEvent.KEYCODE_DPAD_DOWN
+                || code == KeyEvent.KEYCODE_DPAD_LEFT || code == KeyEvent.KEYCODE_DPAD_RIGHT)) {
+            hint.onArrowPress();
+        }
         return super.dispatchKeyEvent(event);
     }
 
     private void togglePointer() {
         pointer.setOn(!pointer.isOn());
-        Toast.makeText(this, pointer.isOn()
-                ? "Pointer on: arrows move it, OK taps. Hold OK or press Back to turn it off."
-                : "Pointer off", Toast.LENGTH_SHORT).show();
+        hint.onPointerToggled(pointer.isOn());
+    }
+
+    /**
+     * TV banner, top right below the site's menu bar, that teaches pointer mode. Most remote users never
+     * find the long press on OK on their own, and need it where arrow-key
+     * navigation can't reach (the player's subtitle and settings menus).
+     *
+     * - The first time someone browses with the arrows after installing, a
+     *   few presses in, it says once that holding OK gives a pointer.
+     * - When mkflix-tv.js reports two arrow presses in a row that went
+     *   nowhere, it says so again, at most once per page each time the
+     *   app runs.
+     * - Both stop for good once pointer mode has been turned on twice: by
+     *   then the user knows it.
+     * It also confirms pointer mode turning on and off, every time.
+     *
+     * It never takes focus or keys, so the remote keeps working while it
+     * shows, and it fades out by itself. What it has shown is kept in the
+     * app's own preferences, so signing out or the site clearing its data
+     * doesn't bring the hints back.
+     */
+    static final class TvHint extends LinearLayout {
+        private static final String PREFS = "mkflix_tv_hints";
+        private static final int LEARNED_AFTER = 2;   // times pointer mode was turned on
+        private static final int BROWSE_AFTER = 3;    // arrow presses before the first-browse hint
+        private static final long HINT_MS = 7000;
+        private static final long CONFIRM_MS = 4000;
+
+        private final SharedPreferences prefs;
+        private final TextView message;
+        private final float density;
+        private final Set<String> stuckShownOn = new HashSet<>();
+        private final Runnable hideNow = this::hide;
+        private int arrowPresses;
+
+        TvHint(Context context) {
+            super(context);
+            prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+            density = context.getResources().getDisplayMetrics().density;
+            setOrientation(HORIZONTAL);
+            setGravity(Gravity.CENTER_VERTICAL);
+            setFocusable(false);
+            setClickable(false);
+            setVisibility(GONE);
+            int pad = dp(14);
+            setPadding(pad, dp(12), dp(18), dp(12));
+            GradientDrawable card = new GradientDrawable();
+            card.setColor(0xEE111118);
+            card.setCornerRadius(dp(14));
+            card.setStroke(dp(2), 0xFFE040FB);
+            setBackground(card);
+
+            // A drawing of the remote's OK button.
+            TextView ok = new TextView(context);
+            ok.setText("OK");
+            ok.setTextColor(0xFFFFFFFF);
+            ok.setTextSize(13);
+            ok.setTypeface(Typeface.DEFAULT_BOLD);
+            ok.setGravity(Gravity.CENTER);
+            GradientDrawable button = new GradientDrawable();
+            button.setShape(GradientDrawable.OVAL);
+            button.setColor(0xFF1E1E2A);
+            button.setStroke(dp(2), 0xFF00E5FF);
+            ok.setBackground(button);
+            LayoutParams okSize = new LayoutParams(dp(40), dp(40));
+            okSize.setMarginEnd(dp(14));
+            addView(ok, okSize);
+
+            message = new TextView(context);
+            message.setTextColor(0xFFFFFFFF);
+            message.setTextSize(16);
+            message.setMaxWidth(dp(380));
+            message.setLineSpacing(0, 1.15f);
+            addView(message);
+        }
+
+        FrameLayout.LayoutParams layoutParams() {
+            FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                    Gravity.TOP | Gravity.END);
+            // Below cinejoy.pk's top menu bar, so the menu stays visible while
+            // the banner shows, and clear of the edges TVs can crop
+            // (overscan). Subtitles sit at the bottom, well away from it.
+            lp.setMargins(0, dp(80), dp(48), 0);
+            return lp;
+        }
+
+        private int dp(float v) {
+            return Math.round(v * density);
+        }
+
+        private boolean learned() {
+            return prefs.getInt("pointerUses", 0) >= LEARNED_AFTER;
+        }
+
+        void onArrowPress() {
+            if (learned() || prefs.getBoolean("browseHintShown", false)) {
+                return;
+            }
+            if (++arrowPresses < BROWSE_AFTER) {
+                return;
+            }
+            prefs.edit().putBoolean("browseHintShown", true).apply();
+            show("Tip: hold OK on your remote to get a pointer you can move with the arrows.", HINT_MS);
+        }
+
+        /** The arrows went nowhere twice in a row on this page (from mkflix-tv.js). */
+        void onStuck(String page) {
+            if (learned() || !stuckShownOn.add(page == null ? "" : page)) {
+                return;
+            }
+            show("Can't reach something? Hold OK for a pointer you can move with the arrows.", HINT_MS);
+        }
+
+        void onPointerToggled(boolean on) {
+            if (on) {
+                prefs.edit().putInt("pointerUses", prefs.getInt("pointerUses", 0) + 1).apply();
+                show("Pointer on: the arrows move it and OK taps. Hold OK or press Back to turn it off.",
+                        CONFIRM_MS);
+            } else {
+                show("Pointer off", 1500);
+            }
+        }
+
+        private void show(String text, long ms) {
+            message.setText(text);
+            removeCallbacks(hideNow);
+            animate().cancel();
+            if (getVisibility() != VISIBLE) {
+                setAlpha(0f);
+                setVisibility(VISIBLE);
+            }
+            bringToFront();
+            animate().alpha(1f).setDuration(200).start();
+            postDelayed(hideNow, ms);
+        }
+
+        private void hide() {
+            animate().alpha(0f).setDuration(300).withEndAction(() -> setVisibility(GONE)).start();
+        }
     }
 
     /**
@@ -1565,6 +1717,19 @@ public class MainActivity extends Activity {
 
     /** JavaScript bridge (window.MKFlixNative), used by the gate and enforcer. */
     private final class MkFlixBridge {
+        /**
+         * mkflix-tv.js: two arrow presses in a row on this page went nowhere.
+         * It only shows a hint, so any page may call it.
+         */
+        @JavascriptInterface
+        public void tvStuck(String page) {
+            runOnUiThread(() -> {
+                if (hint != null && (pointer == null || !pointer.isOn())) {
+                    hint.onStuck(page);
+                }
+            });
+        }
+
         @JavascriptInterface
         public String getApiBase() {
             return apiBaseConfig;
