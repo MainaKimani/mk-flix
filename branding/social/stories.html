@@ -1,0 +1,173 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face { font-family: "UbuntuB"; src: url("../fonts/Ubuntu-B.ttf"); }
+  :root {
+    --cyan: #00e5ff; --magenta: #e040fb; --red: #ff4060;
+    --neon: linear-gradient(90deg, var(--cyan), var(--magenta), var(--red));
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1080px; height: 1920px; overflow: hidden; background: #000; }
+  body {
+    font-family: "Ubuntu Sans", "Ubuntu", sans-serif; color: #fff; position: relative;
+    background:
+      radial-gradient(900px 700px at 0% 8%, rgba(0,229,255,.22), transparent 70%),
+      radial-gradient(900px 800px at 100% 55%, rgba(224,64,251,.26), transparent 70%),
+      radial-gradient(800px 600px at 20% 100%, rgba(255,64,96,.20), transparent 70%),
+      #050508;
+  }
+  .grain { position: absolute; inset: 0; opacity: .06;
+    background-image: repeating-linear-gradient(0deg, #fff 0 1px, transparent 1px 3px); }
+  .bold { font-family: "UbuntuB", "Ubuntu", sans-serif; font-weight: 700; }
+  .neon-text { background: var(--neon); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .brand { position: absolute; top: 210px; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: 22px; }
+  .brand img { width: 170px; height: 170px; filter: drop-shadow(0 0 40px rgba(224,64,251,.55)) drop-shadow(0 0 22px rgba(0,229,255,.4)); }
+  .brand .name { font-size: 76px; letter-spacing: 1px; }
+  .center { position: absolute; left: 80px; right: 80px; text-align: center; }
+  .h1 { font-size: 112px; line-height: 1.02; letter-spacing: -1px; }
+  .sub { font-size: 44px; line-height: 1.35; color: rgba(255,255,255,.82); }
+  .chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 22px; }
+  .chip { padding: 22px 34px; border-radius: 999px; font-size: 40px; border: 2px solid rgba(255,255,255,.22);
+    background: rgba(255,255,255,.05); }
+  .chip.hot { border: 0; background: linear-gradient(90deg, var(--magenta), var(--red)); }
+  .devices { display: flex; justify-content: center; gap: 70px; }
+  .device { display: flex; flex-direction: column; align-items: center; gap: 14px; font-size: 34px; color: rgba(255,255,255,.8); }
+  .device svg { width: 110px; height: 110px; stroke: var(--cyan); fill: none; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round;
+    filter: drop-shadow(0 0 12px rgba(0,229,255,.6)); }
+  .cta { position: absolute; left: 80px; right: 80px; bottom: 235px; border-radius: 36px; padding: 40px 30px; text-align: center;
+    background: rgba(17,17,24,.85); border: 3px solid var(--magenta); box-shadow: 0 0 60px rgba(224,64,251,.45); }
+  .cta .label { font-size: 38px; color: rgba(255,255,255,.75); margin-bottom: 12px; }
+  .cta .url { font-size: 62px; }
+  /* --- glass case --- */
+  .case { position: absolute; left: 110px; right: 110px; top: 560px; height: 860px; border-radius: 34px;
+    border: 14px solid #d9183c; box-shadow: 0 0 0 4px #ff4060 inset, 0 0 70px rgba(255,64,96,.55), 0 0 140px rgba(224,64,251,.25);
+    background: #0b0b12; overflow: hidden; }
+  .case .sign { position: absolute; z-index: 3; left: 0; right: 0; text-shadow: 0 2px 12px #000; text-align: center; font-size: 46px; letter-spacing: 6px; color: #fff; }
+  .case .sign.top { top: 40px; }
+  .case .sign.bottom { bottom: 40px; }
+  .prize { position: absolute; z-index: 2; inset: 140px 40px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; text-align: center; }
+  .prize img { width: 190px; height: 190px; filter: drop-shadow(0 0 36px rgba(224,64,251,.6)); }
+  .prize .v { font-size: 190px; line-height: 1; }
+  .prize .t { font-size: 44px; color: rgba(255,255,255,.85); }
+  .broken .prize { text-shadow: 0 2px 14px #000, 0 0 4px #000; }
+  .broken .prize .v { text-shadow: none; filter: drop-shadow(0 0 18px rgba(0,0,0,.9)) drop-shadow(0 0 24px rgba(224,64,251,.45)); }
+  svg.cracks { z-index: 1; }
+  .glass { position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(125deg, rgba(255,255,255,.22) 0%, rgba(255,255,255,.04) 22%, rgba(255,255,255,0) 40%,
+      rgba(255,255,255,.10) 55%, rgba(255,255,255,0) 62%), rgba(170,220,255,.10);
+    backdrop-filter: blur(3px); }
+  .tap { position: absolute; left: 0; right: 0; bottom: 300px; text-align: center; }
+  .tap .big { font-size: 76px; }
+  .tap .small { font-size: 38px; color: rgba(255,255,255,.75); margin-top: 14px; }
+  .finger { display: inline-block; vertical-align: middle; width: 64px; height: 64px; border-radius: 50%; border: 5px solid var(--cyan);
+    box-shadow: 0 0 0 12px rgba(0,229,255,.15), 0 0 30px rgba(0,229,255,.6); margin: -8px 34px 0 0; }
+  svg.cracks { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .new { list-style: none; display: flex; flex-direction: column; gap: 16px; font-size: 38px; text-align: left; margin: 0 auto; width: fit-content; }
+  .new li::before { content: "✦"; color: var(--magenta); margin-right: 16px; }
+</style>
+</head>
+<body>
+<div class="grain"></div>
+<div id="root"></div>
+<script>
+const v = location.hash.slice(1) || "launch";
+const root = document.getElementById("root");
+const logo = "mark.png";
+const icons = {
+  phone: '<svg viewBox="0 0 64 64"><rect x="18" y="4" width="28" height="56" rx="6"/><line x1="28" y1="52" x2="36" y2="52"/></svg>',
+  tv: '<svg viewBox="0 0 64 64"><rect x="4" y="10" width="56" height="36" rx="5"/><line x1="22" y1="56" x2="42" y2="56"/><line x1="32" y1="46" x2="32" y2="56"/></svg>',
+  laptop: '<svg viewBox="0 0 64 64"><rect x="10" y="12" width="44" height="30" rx="4"/><path d="M4 50 h56 l-4 6 H8 z"/></svg>'
+};
+
+if (v === "launch") {
+  root.innerHTML = `
+    <div class="brand"><img src="${logo}"><div class="name bold neon-text">Blendy Play</div></div>
+    <div class="center" style="top:560px">
+      <div class="h1 bold">Watch more.<br><span class="neon-text">Skip the ads.</span></div>
+      <p class="sub" style="margin-top:36px">Movies and series, ad-free,<br>on your phone, TV and computer.</p>
+    </div>
+    <div class="center" style="top:1030px">
+      <div class="devices">
+        <div class="device">${icons.phone}Phone</div>
+        <div class="device">${icons.tv}TV</div>
+        <div class="device">${icons.laptop}Computer</div>
+      </div>
+    </div>
+    <div class="center" style="top:1215px">
+      <div class="chips">
+        <div class="chip hot bold">Pay with M-Pesa</div>
+      </div>
+    </div>
+    <div class="cta"><div class="label">Live now. Get it at</div><div class="url bold neon-text">blendy.mainakimani.com</div></div>`;
+} else {
+  const broken = v === "broken";
+  root.innerHTML = `
+    <div class="brand" style="top:250px"><div class="name bold neon-text" style="font-size:64px">Blendy Play</div>
+      <div class="sub" style="font-size:40px">${broken ? "You broke it. You're in." : "Something new is locked in here..."}</div></div>
+    <div class="case${broken ? " broken" : ""}">
+      <div class="sign top bold">${broken ? "EARLY ACCESS" : "IN CASE OF BOREDOM"}</div>
+      <div class="prize">
+        ${broken ? `
+          <div class="v bold neon-text" style="font-size:118px;line-height:1.05">New release</div>
+          <div class="t bold" style="font-size:52px;color:#fff">is yours before everyone else</div>
+          <ul class="new" style="margin-top:26px">
+            <li>Asks "Still watching?"</li>
+            <li>Takes you home when a film ends</li>
+            <li>Remote tips on TV</li>
+          </ul>` : `
+          <img src="${logo}">
+          <div class="v bold neon-text" style="font-size:118px;line-height:1.05">What's next</div>
+          <div class="t">The new Blendy Play</div>`}
+      </div>
+      ${broken ? '<svg class="cracks" id="cracks"></svg>' : '<div class="glass"></div>'}
+      <div class="sign bottom bold">${broken ? "ENJOY" : "BREAK GLASS"}</div>
+    </div>
+    ${broken ? `
+      <div class="cta" style="bottom:250px"><div class="label">Get it early at</div><div class="url bold neon-text">blendy.mainakimani.com</div></div>` : `
+      <div class="tap"><div class="big bold"><span class="finger"></span>Tap to break the glass</div>
+        <div class="small">and get the next release early</div></div>`}`;
+
+  if (broken) {
+    // Shattered glass: lines radiating from a point of impact, with rings of
+    // short jagged cracks between them, and loose shards near the edges.
+    const svg = document.getElementById("cracks");
+    const W = 860 - 28, H = 860 - 28, cx = W * 0.86, cy = H * 0.13;
+    let seed = 7;
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const rays = 22, pts = [];
+    let out = "";
+    for (let i = 0; i < rays; i++) {
+      const a = (i / rays) * Math.PI * 2 + rnd() * 0.18;
+      const ray = [[cx, cy]];
+      let r = 0;
+      while (r < 1500) {
+        r += 60 + rnd() * 90;
+        const aa = a + (rnd() - 0.5) * 0.12;
+        ray.push([cx + Math.cos(aa) * r, cy + Math.sin(aa) * r]);
+      }
+      pts.push(ray);
+      out += `<polyline points="${ray.map(p => p.join(",")).join(" ")}" fill="none" stroke="rgba(235,245,255,.6)" stroke-width="${1.5 + rnd() * 2}"/>`;
+    }
+    for (let ring = 1; ring < 9; ring++) {
+      for (let i = 0; i < rays; i++) {
+        const a = pts[i][ring], b = pts[(i + 1) % rays][ring];
+        if (!a || !b || rnd() < 0.25) continue;
+        const mx = (a[0] + b[0]) / 2 + (rnd() - 0.5) * 30, my = (a[1] + b[1]) / 2 + (rnd() - 0.5) * 30;
+        out += `<polyline points="${a.join(",")} ${mx},${my} ${b.join(",")}" fill="none" stroke="rgba(235,245,255,.35)" stroke-width="1.4"/>`;
+      }
+    }
+    // Faint frosted shards between the first rings, so the glass reads as glass.
+    for (let i = 0; i < rays; i += 2) {
+      const a = pts[i], b = pts[(i + 1) % rays];
+      out += `<polygon points="${a[1].join(",")} ${a[2].join(",")} ${b[2].join(",")} ${b[1].join(",")}" fill="rgba(200,230,255,${0.05 + rnd() * 0.07})"/>`;
+    }
+    out += `<circle cx="${cx}" cy="${cy}" r="22" fill="rgba(255,255,255,.85)"/><circle cx="${cx}" cy="${cy}" r="60" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="3"/>`;
+    svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+    svg.innerHTML = out;
+  }
+}
+</script>
+</body>
+</html>
