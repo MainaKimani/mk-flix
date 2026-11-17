@@ -35,6 +35,8 @@
       "mkflix-enforcer.js",
       "mkflix-menu.js",
       "mkflix-lock.js",
+      "mkflix-notice.js",
+      "mkflix-player.js",
       "mkflix-config.json",
       "package.json"
     ],
