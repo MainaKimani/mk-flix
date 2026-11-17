@@ -7,7 +7,7 @@
     "name": "Blendy Studio",
     "email": "alexroymauk@gmail.com"
   },
-  "homepage": "https://github.com/MainaKimani/mk-flix",
+  "homepage": "https://blendy.mainakimani.com",
   "desktopName": "blendy-play.desktop",
   "main": "main.js",
   "engines": {
