@@ -116,6 +116,7 @@
   button.pw-toggle:hover { color: var(--text); }
   .pw-toggle svg { width: 20px; height: 20px; display: block; }
   .hint { color: var(--muted); font-size: 12px; margin: 6px 2px 0; }
+  .retry-ref { text-align: center; margin-top: 14px; }
   /* In-app update */
   .notes { margin: 0 0 16px; padding: 0 0 0 18px; color: var(--muted); font-size: 14px; line-height: 1.6; }
   .progress { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; margin: 6px 0 4px; }
@@ -332,9 +333,10 @@
     <!-- can't reach backend -->
     <section data-view="retry" class="hidden">
       <h1>Can't reach Blendy Play</h1>
-      <p class="sub">We couldn't check your subscription. Check your connection
+      <p class="sub" id="retry-msg">We couldn't check your subscription. Check your connection
         and try again.</p>
       <button id="retry-btn">Try again</button>
+      <p class="hint retry-ref" id="retry-ref"></p>
     </section>
   </div>
 
@@ -530,7 +532,8 @@
   //                  subscription page.
   var entryMode = location.hash === "#subscription" ? "subscription" : "launch";
 
-  function checkAccess(mode) {
+  // retried: this is the quiet second attempt (see cantReach).
+  function checkAccess(mode, retried) {
     mode = mode || entryMode;
     show("loading");
     if (!getAccess()) { show("welcome"); return; }
@@ -560,9 +563,34 @@
       } else if (r.status === 401) {
         clearTokens(); show("welcome");
       } else {
-        show("retry");
+        cantReach(mode, retried, r.status);
       }
-    }).catch(function () { show("retry"); });
+    }).catch(function () { cantReach(mode, retried, 0); });
+  }
+
+  // The subscription check failed: no answer at all (status 0), or an
+  // answer the gate can't use (a 5xx from the host, say). Most of these are
+  // a blip, so try once more, quietly, before saying anything. Then say in
+  // plain words whether it's the user's connection or our side, and give a
+  // short reference a tester can quote, since a request that never arrives
+  // leaves nothing in the backend's log.
+  var retryMode = null;
+  function cantReach(mode, retried, status) {
+    if (!retried) {
+      setTimeout(function () { checkAccess(mode, true); }, 2000);
+      return;
+    }
+    retryMode = mode;
+    var offline = !status;
+    var noNetwork = offline && navigator.onLine === false;
+    document.getElementById("retry-msg").textContent = noNetwork
+      ? "Your device isn't connected to the internet. Connect to Wi-Fi or mobile data, then try again."
+      : offline
+        ? "Your device couldn't connect to Blendy Play. Check your internet connection, then try again."
+        : "Blendy Play is having trouble on our side. It's not your connection. Please try again in a minute.";
+    document.getElementById("retry-ref").textContent = "If this keeps happening, let us know and mention: " +
+      (noNetwork ? "offline" : offline ? "no response" : "error " + status) + ".";
+    show("retry");
   }
 
   // --- In-app updates --------------------------------------------------------
@@ -1143,7 +1171,7 @@
   document.getElementById("pay-btn").addEventListener("click", pay);
   document.getElementById("browse-btn").addEventListener("click", gotoSite);
   document.getElementById("logout-2").addEventListener("click", logout);
-  document.getElementById("retry-btn").addEventListener("click", function () { checkAccess(); });
+  document.getElementById("retry-btn").addEventListener("click", function () { checkAccess(retryMode); });
   document.getElementById("back-btn").addEventListener("click", goBack);
   document.getElementById("cj-save").addEventListener("click", saveCinejoy);
   document.getElementById("cj-back").addEventListener("click", backFromCinejoy);
