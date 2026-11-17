@@ -225,8 +225,8 @@ let mkSession = { apiBase: '', access: '', refresh: '' };
 let subscribed = false;
 
 // Resolves to { status, data } (data null if the body isn't JSON), or null
-// if the backend couldn't be reached.
-function getJson(url, token) {
+// if the backend couldn't be reached. With a body, it's a JSON POST.
+function getJson(url, token, body) {
   return new Promise((resolve) => {
     let lib;
     try {
@@ -235,12 +235,17 @@ function getJson(url, token) {
       return resolve(null);
     }
     const headers = {
-      Authorization: `Bearer ${token}`,
       // Lets the backend refuse versions older than its minimum (426).
       'X-App-Version': app.getVersion(),
       'X-App-Platform': APP_PLATFORM,
     };
-    const req = lib.get(url, { headers, timeout: 15000 }, (res) => {
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const payload = body === undefined ? null : JSON.stringify(body);
+    if (payload !== null) {
+      headers['Content-Type'] = 'application/json';
+      headers['Content-Length'] = Buffer.byteLength(payload);
+    }
+    const req = lib.request(url, { method: payload === null ? 'GET' : 'POST', headers, timeout: 15000 }, (res) => {
       let body = '';
       res.on('data', (d) => (body += d));
       res.on('end', () => {
@@ -251,7 +256,29 @@ function getJson(url, token) {
     });
     req.on('error', () => resolve(null));
     req.on('timeout', () => { req.destroy(); resolve(null); });
+    req.end(payload === null ? undefined : payload);
   });
+}
+
+// The access token lasts an hour, and the gate only hands over a fresh one
+// when it runs. So the check refreshes it itself, once, on a plain 401;
+// without this every check after the first hour was a wasted 401 and a
+// subscription that ran out, or a device signed out from the portal, went
+// unnoticed until the next launch.
+async function checkWithRefresh() {
+  const url = `${mkSession.apiBase}/me/subscription`;
+  const res = await getJson(url, mkSession.access);
+  if (!res || res.status !== 401 || (res.data && res.data.code === 'session_revoked') || !mkSession.refresh) {
+    return res;
+  }
+  const session = mkSession;
+  const r = await getJson(`${session.apiBase}/auth/refresh`, null, { refresh: session.refresh });
+  if (r && r.status === 401 && r.data && r.data.code === 'session_revoked') return r;
+  if (!r || r.status !== 200 || !r.data || typeof r.data.access !== 'string') return res;
+  // The gate may have handed over a new session meanwhile; that one wins.
+  if (mkSession !== session) return null;
+  mkSession = { ...session, access: r.data.access };
+  return getJson(url, mkSession.access);
 }
 
 let checking = false;
@@ -260,7 +287,7 @@ async function refreshSubscription() {
   if (checking) return; // one check at a time
   checking = true;
   try {
-    const res = await getJson(`${mkSession.apiBase}/me/subscription`, mkSession.access);
+    const res = await checkWithRefresh();
     const data = res && res.data;
     if (res && res.status === 200 && data && typeof data.active === 'boolean') {
       subscribed = data.active;
