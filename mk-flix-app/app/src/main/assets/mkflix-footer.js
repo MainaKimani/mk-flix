@@ -15,6 +15,10 @@
 // would drop our block, so a MutationObserver puts it back whenever it is
 // missing.
 //
+// Listing labels: "Top 10 on Cinejoy today" and the hero's "#5 on Cinejoy
+// today" drop "on Cinejoy" ("Top 10 today", "#5 today"). Only the text is
+// changed, so the site's own rendering keeps working.
+//
 // This file is shared: the desktop app loads it from mk-flix-desktop/, the
 // Android app from app/src/main/assets/. Keep the two copies identical.
 (function () {
@@ -57,6 +61,28 @@
     if (footer && !footer.querySelector('#mkflix-footer')) footer.appendChild(buildFooter());
   }
 
+  var ON_SITE = /\s+on Cinejoy\b/gi;
+  function relabel() {
+    if (!document.body) return;
+    var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode: function (n) {
+        return /on Cinejoy/i.test(n.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+      }
+    });
+    var n, found = [];
+    while ((n = walker.nextNode())) found.push(n);
+    for (var i = 0; i < found.length; i++) found[i].nodeValue = found[i].nodeValue.replace(ON_SITE, "");
+  }
+
+  var queued = false;
+  function onChange() {
+    ensure();
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(function () { queued = false; relabel(); });
+  }
+
   ensure();
-  new MutationObserver(ensure).observe(document.documentElement, { childList: true, subtree: true });
+  relabel();
+  new MutationObserver(onChange).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
 })();
