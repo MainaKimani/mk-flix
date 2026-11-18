@@ -15,3 +15,8 @@ svg.loading-logo { animation: mkflix-pulse 1.6s ease-in-out infinite !important;
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.7; transform: scale(0.94); }
 }
+
+/* CineJoy's Settings page on phones: its content box (z-50, after the top
+   bar in the page) sits over the fixed top bar, so the back arrow and the
+   logo can't be tapped. Keep it just below the bar. */
+.md\:hidden.pt-24.px-6.relative.z-50 { z-index: 40 !important; }
