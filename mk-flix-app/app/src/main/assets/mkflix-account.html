@@ -259,6 +259,7 @@
     <section data-view="active" class="hidden">
       <h1>My Subscription</h1>
       <div id="sub-badge"></div>
+      <div class="note hidden" id="sub-note" role="status"></div>
       <dl class="sub-info" id="sub-info"></dl>
       <button id="sub-primary"></button>
       <button id="sub-secondary" class="secondary"></button>
@@ -533,7 +534,18 @@
   //                  without a subscription, the paywall says why.
   //   "subscription" (the "My Subscription" menu, after a payment): the
   //                  subscription page.
-  var entryMode = location.hash === "#subscription" ? "subscription" : "launch";
+  var entryMode = location.hash.indexOf("#subscription") === 0 ? "subscription" : "launch";
+  // Back from CineJoy's create panel because CineJoy refused for now (too
+  // many new accounts from this network): say so once, on the next page.
+  var codeBusy = location.hash === "#subscription-busy";
+  var CODE_BUSY = "Our third-party servers are busy right now, so we couldn't create your code. " +
+    "You can create it later with Generate Server Code below. You can still subscribe and watch without it.";
+  function takeCodeBusy() {
+    if (!codeBusy) return "";
+    codeBusy = false;
+    try { history.replaceState(null, "", "#subscription"); } catch (e) {}
+    return CODE_BUSY;
+  }
 
   // retried: this is the quiet second attempt (see cantReach).
   function checkAccess(mode, retried) {
@@ -849,6 +861,9 @@
 
   function showSubscription(sub) {
     var active = !!sub.active;
+    var subNote = document.getElementById("sub-note");
+    subNote.textContent = takeCodeBusy();
+    subNote.classList.toggle("hidden", !subNote.textContent);
     var end = sub.current_period_end ? new Date(sub.current_period_end) : null;
     var labels = { ACTIVE: "Active", EXPIRED: "Expired", CANCELLED: "Cancelled", PENDING: "Pending" };
     var statusText = active ? "Active" : (labels[sub.status] || "Inactive");
@@ -956,8 +971,9 @@
     paywallReturn = "site";
     selectedPlan = null;
     var note = document.getElementById("pay-note");
-    note.textContent = typeof notice === "string" ? notice : "";
-    note.classList.toggle("hidden", typeof notice !== "string" || !notice);
+    var text = [takeCodeBusy(), typeof notice === "string" ? notice : ""].filter(Boolean).join(" ");
+    note.textContent = text;
+    note.classList.toggle("hidden", !text);
     document.getElementById("terms-ok").checked = false;
     updatePayButton();
     document.getElementById("pay-err").textContent = "";

@@ -58,6 +58,7 @@ contextBridge.exposeInMainWorld('MKFlixNative', {
   takeCinejoySignOut: () => ipcRenderer.sendSync('mkflix:cj-take-sign-out'),
   cinejoySignedIn: (n) => ipcRenderer.send('mkflix:cj-signed-in', String(n || '')),
   cinejoyCreated: () => ipcRenderer.send('mkflix:cj-created'),
+  cinejoyBusy: () => ipcRenderer.send('mkflix:cj-busy'),
 });
 
 let info = null;

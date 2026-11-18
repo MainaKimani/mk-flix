@@ -420,6 +420,13 @@ ipcMain.on('mkflix:cj-signed-in', (event, n) => {
   const num = validCinejoyNumber(n);
   if (fromCinejoy(event) && num) cinejoyUpdate({ number: num, pending: num });
 });
+// mkflix-cinejoy.js: CineJoy refused to create a code for now (too many from
+// this network); back to the subscription page, which says so.
+ipcMain.on('mkflix:cj-busy', (event) => {
+  if (!fromCinejoy(event)) return;
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win) win.loadFile(path.join(__dirname, 'mkflix-account.html'), { hash: 'subscription-busy' });
+});
 // mkflix-cinejoy.js: the code was created; back to the subscription page.
 ipcMain.on('mkflix:cj-created', (event) => {
   if (!fromCinejoy(event)) return;

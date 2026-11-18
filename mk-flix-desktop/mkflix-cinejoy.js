@@ -159,6 +159,23 @@
     requestAnimationFrame(function () { queued = false; relabel(); });
   }).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
 
+  // CineJoy limits new accounts per network ("Too many requests from this
+  // network", for about half an hour). Rather than leave the user on that
+  // error, go back to Blendy Play, which says to try again later.
+  if (creating) {
+    var busyCheck = setInterval(function () {
+      if (!creating) { clearInterval(busyCheck); return; }
+      var p = panel();
+      if (p && /too many requests/i.test(p.textContent || "")) {
+        clearInterval(busyCheck);
+        creating = false;
+        setTimeout(function () {
+          try { bridge.cinejoyBusy(); } catch (e) {}
+        }, 1500);
+      }
+    }, 500);
+  }
+
   // Opened from the gate: Settings, then the account's Sign In button, then
   // the Create tab. Tries for a while as the page renders.
   if (creating) {

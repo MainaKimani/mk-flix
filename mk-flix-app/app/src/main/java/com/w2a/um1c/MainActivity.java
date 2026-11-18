@@ -1838,6 +1838,17 @@ public class MainActivity extends Activity {
             }
         }
 
+        /**
+         * mkflix-cinejoy.js: CineJoy refused to create a code for now (too
+         * many from this network); back to the subscription page, which says so.
+         */
+        @JavascriptInterface
+        public void cinejoyBusy() {
+            if (isCineJoyUrl(pageUrl)) {
+                loadOnUiThread(ACCOUNT_PAGE + "#subscription-busy");
+            }
+        }
+
         /** mkflix-cinejoy.js: the code was created; back to the subscription page. */
         @JavascriptInterface
         public void cinejoyCreated() {
