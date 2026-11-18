@@ -35,11 +35,11 @@ CineJoy account is required, and must never point users at cinejoy.pk.
 **One sign-in for both** (`mkflix-cinejoy.js`, the bridge in `MainActivity` /
 desktop `main.js` + `preload.js`). CineJoy's only credential is its 16-digit
 number, which the backend keeps encrypted on the user's account. After the
-email is confirmed, the gate offers "Create your watch code": the app opens
-CineJoy's own create panel (renamed "Create Code", tabs "Key in"/"Create"),
+email is confirmed, the gate offers "Create your server key": the app opens
+CineJoy's own create panel (renamed "Create Key", tabs "Key in"/"Create"),
 the user passes CineJoy's captcha and taps Generate, and the app saves the
 number and returns to the subscription page. The plans and My Subscription
-pages offer "Generate Server Code" while no number is saved. On cinejoy.pk the
+pages offer "Generate Server Key" while no number is saved. On cinejoy.pk the
 script signs the app in with the saved number (`POST
 server2.wing.st/api/auth/login {accountId, device:"web"}`, then
 `cinejoy_token` / `cinejoy_account_id` in localStorage), reports a number made
@@ -306,7 +306,7 @@ mk-flix-be commits:
 **Startup → gate → site.** Both apps open on a local page `mkflix-account.html`
 (the "gate"), not cinejoy.pk. The gate checks the backend for a subscription and
 handles onboarding, the terms, M-Pesa payment, the "My Subscription" page, and
-the CineJoy code step. A signed-in user can **Browse without subscribing**;
+the CineJoy key step. A signed-in user can **Browse without subscribing**;
 the gate then sends the WebView/window to cinejoy.pk.
 
 **Gate entry modes** (`checkAccess(mode)` in `mkflix-account.html`):
@@ -333,7 +333,7 @@ needs no app build; refresh the fallback at a release if it has drifted.
 
 **Shared, injected scripts** (identical copies in `mk-flix-app/app/src/main/assets/`
 and `mk-flix-desktop/` — keep them byte-identical):
-- `mkflix-account.html` — the gate (views: welcome, auth, plans/paywall, terms, paying, My Subscription, the CineJoy code step, retry). API base from `MKFlixNative.getApiBase()`; JWT in `localStorage`; refresh-on-401.
+- `mkflix-account.html` — the gate (views: welcome, auth, plans/paywall, terms, paying, My Subscription, the CineJoy key step, retry). API base from `MKFlixNative.getApiBase()`; JWT in `localStorage`; refresh-on-401.
 - `mkflix-enforcer.js` — blocks navigation to a `/watch/` page when unsubscribed and opens the paywall.
 - `mkflix-menu.js` — adds "My Subscription" to cinejoy's **Settings submenu** and the **floating bottom bar** — never the main nav.
 - `mkflix-lock.js` — golden padlock on each poster while unsubscribed.

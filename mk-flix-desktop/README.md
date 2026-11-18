@@ -22,7 +22,7 @@ folder, so it sits alongside MK-Flix and users sign in once.
 - `mkflix-account.html` — the account gate, shown at startup instead of
   cinejoy.pk. It checks the [MK-Flix backend](../../mk-flix-be) for a
   subscription (JWT kept in localStorage) and handles onboarding, M-Pesa payment
-  and the user's CineJoy code (see HANDOFF.md). A signed-in user may browse without
+  and the user's CineJoy key (see HANDOFF.md). A signed-in user may browse without
   subscribing; playback is gated instead. The backend URL is set by the
   `MKFLIX_API_BASE` env var or `mkflix-config.json` (`apiBase`) — no editing the
   page. Shared, identical, with the Android app

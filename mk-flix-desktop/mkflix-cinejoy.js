@@ -9,7 +9,7 @@
 //   - after the email is confirmed, opens CineJoy's own create panel, where
 //     the user passes CineJoy's captcha and makes the code themselves;
 //   - signs CineJoy out after Blendy Play signs out;
-//   - renames the panel: "Create Code", and tabs "Key in" / "Create".
+//   - renames the panel: "Create Key", and tabs "Key in" / "Create".
 // The CineJoy account stays optional: with no saved number nothing happens.
 // It learned CineJoy's storage keys and login call from the site itself; if
 // those change, signing in quietly stops and nothing else breaks.
@@ -104,7 +104,7 @@
 
   // --- The panel: names, and opening it on "Create" -------------------------
   var TABS = { "Sign In": "Key in", "Register": "Create" };
-  var HEADINGS = { "Create your account": "Create Code" };
+  var HEADINGS = { "Create your account": "Create Key" };
 
   function text(el) { return (el.textContent || "").trim(); }
 

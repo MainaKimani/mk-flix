@@ -200,13 +200,13 @@
          creates it on its own page, behind its own captcha; the app then saves
          it to this account and brings the user back. -->
     <section data-view="cjcode" class="hidden">
-      <h1>Create your watch code</h1>
+      <h1>Create your server key</h1>
       <p class="sub">Our third-party servers keep your progress and lists under a
-        16-digit code. Create one now and we'll save it to your Blendy Play
+        16-digit key. Create one now and we'll save it to your Blendy Play
         account, so every device you sign in on picks up where you left off.</p>
       <div class="note">On the next screen, tap <strong>Generate my key</strong>.
         It only takes a moment, and you can skip it and watch without one.</div>
-      <button id="cjcode-create">Create my code</button>
+      <button id="cjcode-create">Create my key</button>
       <button id="cjcode-skip" class="secondary">Skip for now</button>
     </section>
 
@@ -242,7 +242,7 @@
       <div class="err" id="pay-err"></div>
       <button id="pay-btn" disabled>Pay</button>
       <button id="browse-btn" class="secondary">Browse without subscribing</button>
-      <a class="link code-link hidden" data-go="code">Generate Server Code</a>
+      <a class="link code-link hidden" data-go="code">Generate Server Key</a>
       <a class="link" id="logout-1">Sign out</a>
     </section>
 
@@ -263,7 +263,7 @@
       <dl class="sub-info" id="sub-info"></dl>
       <button id="sub-primary"></button>
       <button id="sub-secondary" class="secondary"></button>
-      <a class="link code-link hidden" data-go="code">Generate Server Code</a>
+      <a class="link code-link hidden" data-go="code">Generate Server Key</a>
       <a class="link" data-go="terms">Terms and Conditions</a>
       <a class="link" id="logout-2">Sign out</a>
     </section>
@@ -538,8 +538,8 @@
   // Back from CineJoy's create panel because CineJoy refused for now (too
   // many new accounts from this network): say so once, on the next page.
   var codeBusy = location.hash === "#subscription-busy";
-  var CODE_BUSY = "Our third-party servers are busy right now, so we couldn't create your code. " +
-    "You can create it later with Generate Server Code below. You can still subscribe and watch without it.";
+  var CODE_BUSY = "Our third-party servers are busy right now, so we couldn't create your key. " +
+    "You can create it later with Generate Server Key below. You can still subscribe and watch without it.";
   function takeCodeBusy() {
     if (!codeBusy) return "";
     codeBusy = false;
@@ -1105,8 +1105,8 @@
     var b = window.MKFlixNative;
     return b && b.setCinejoyNumber && b.getCinejoyPending ? b : null;
   }
-  // "Generate Server Code" on the plans and subscription pages: only in the
-  // app, and only once we know this account has no code saved.
+  // "Generate Server Key" on the plans and subscription pages: only in the
+  // app, and only once we know this account has no key saved.
   function setHasCode(has) {
     var show = !has && !!(window.MKFlixNative && window.MKFlixNative.createCinejoyCode);
     Array.prototype.forEach.call(document.querySelectorAll(".code-link"), function (a) {
