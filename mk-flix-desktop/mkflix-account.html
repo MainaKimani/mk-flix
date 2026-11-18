@@ -116,6 +116,9 @@
   button.pw-toggle:hover { color: var(--text); }
   .pw-toggle svg { width: 20px; height: 20px; display: block; }
   .hint { color: var(--muted); font-size: 12px; margin: 6px 2px 0; }
+  .hint.good { color: #7ee2b8; }
+  .hint.bad { color: #ffb3bd; }
+  #referral { text-transform: uppercase; letter-spacing: 0.06em; }
   .retry-ref { text-align: center; margin-top: 14px; }
   /* In-app update */
   .notes { margin: 0 0 16px; padding: 0 0 0 18px; color: var(--muted); font-size: 14px; line-height: 1.6; }
@@ -162,6 +165,13 @@
         </button>
       </div>
       <p class="hint" id="password-hint">At least 6 characters, and not all numbers.</p>
+      <!-- An ambassador's code; only when creating an account. -->
+      <div id="referral-wrap" class="hidden">
+        <label for="referral">Referral code (optional)</label>
+        <input id="referral" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false"
+               maxlength="20" placeholder="If someone gave you one" aria-describedby="referral-status">
+        <p class="hint" id="referral-status" aria-live="polite"></p>
+      </div>
       <div class="err" id="auth-err"></div>
       <button id="auth-submit">Continue</button>
       <a class="link hidden" id="auth-forgot">Forgot your password?</a>
@@ -916,6 +926,7 @@
     document.getElementById("password").setAttribute("autocomplete", mode === "register" ? "new-password" : "current-password");
     // The length rule only matters when choosing a password; "forgot" only when signing in.
     document.getElementById("password-hint").classList.toggle("hidden", mode !== "register");
+    document.getElementById("referral-wrap").classList.toggle("hidden", mode !== "register");
     document.getElementById("auth-forgot").classList.toggle("hidden", mode === "register");
     setPasswordVisible(document.querySelector('.pw-toggle[data-for="password"]'), false);
     document.getElementById("auth-err").textContent = "";
@@ -929,11 +940,17 @@
     var btn = document.getElementById("auth-submit");
     err.textContent = "";
     if (!email || !password) { err.textContent = "Enter your email and password."; return; }
+    var referral = authMode === "register" ? referralCode() : "";
+    if (referral && referralState === "bad") {
+      err.textContent = "That referral code isn't valid. Fix it or clear the field.";
+      return;
+    }
     btn.disabled = true;
     var path = authMode === "register" ? "/auth/register" : "/auth/login";
     var body = deviceInfo();
     body.email = email;
     body.password = password;
+    if (referral) body.referral_code = referral;
     request(path, { method: "POST", body: body }).then(function (r) {
       btn.disabled = false;
       if (!r.ok && r.data && r.data.code === "device_limit") {
@@ -951,6 +968,41 @@
         err.textContent = firstError(r.data) || "That didn't work. Please try again.";
       }
     }).catch(function () { btn.disabled = false; err.textContent = "Can't reach Blendy Play. Check your connection."; });
+  }
+
+  // --- Referral code -----------------------------------------------------------
+  // Checked a moment after typing stops; the backend checks it again at sign-up.
+  var referralState = "";   // "", "checking", "good", "bad"
+  var referralTimer = null;
+  var referralSeq = 0;
+  function referralCode() {
+    return document.getElementById("referral").value.replace(/\s+/g, "").toUpperCase();
+  }
+  function setReferralStatus(state, text) {
+    referralState = state;
+    var el = document.getElementById("referral-status");
+    el.textContent = text;
+    el.className = "hint" + (state === "good" ? " good" : state === "bad" ? " bad" : "");
+  }
+  function onReferralInput() {
+    clearTimeout(referralTimer);
+    var code = referralCode();
+    if (!code) { setReferralStatus("", ""); return; }
+    if (!/^[A-Z0-9]{4,20}$/.test(code)) {
+      setReferralStatus("bad", code.length < 4 ? "" : "Codes are letters and digits only.");
+      if (code.length < 4) referralState = "short";
+      return;
+    }
+    setReferralStatus("checking", "Checking…");
+    var seq = ++referralSeq;
+    referralTimer = setTimeout(function () {
+      request("/referrals/check?code=" + encodeURIComponent(code)).then(function (r) {
+        if (seq !== referralSeq) return;
+        if (r.ok && r.data && r.data.valid) setReferralStatus("good", "\u2713 Code accepted.");
+        else if (r.ok) setReferralStatus("bad", "That code isn't valid.");
+        else setReferralStatus("", "");
+      }).catch(function () { if (seq === referralSeq) setReferralStatus("", ""); });
+    }, 500);
   }
 
   function firstError(data) {
@@ -1209,6 +1261,8 @@
   document.getElementById("auth-submit").addEventListener("click", submitAuth);
   document.getElementById("auth-toggle").addEventListener("click", function () { openAuth(authMode === "register" ? "login" : "register"); });
   document.getElementById("password").addEventListener("keydown", function (e) { if (e.key === "Enter") submitAuth(); });
+  document.getElementById("referral").addEventListener("input", onReferralInput);
+  document.getElementById("referral").addEventListener("keydown", function (e) { if (e.key === "Enter") submitAuth(); });
   document.getElementById("pay-btn").addEventListener("click", pay);
   document.getElementById("browse-btn").addEventListener("click", gotoSite);
   document.getElementById("logout-2").addEventListener("click", logout);
