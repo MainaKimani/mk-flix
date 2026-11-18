@@ -120,7 +120,7 @@ public class MainActivity extends Activity {
     private String menuJs = "";
     // Golden padlock on each poster while unsubscribed (assets/mkflix-lock.js).
     private String lockJs = "";
-    // Hides CineJoy's "all issues fixed, no ads, 4K" announcement popup
+    // Closes CineJoy's "all issues fixed, no ads, 4K" announcement popup
     // (assets/mkflix-notice.js).
     private String noticeJs = "";
     // "Still watching?" after 90 idle minutes of autoplay, and the card at the
