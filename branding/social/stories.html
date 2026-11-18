@@ -105,13 +105,13 @@ if (v === "launch") {
   const broken = v === "broken";
   root.innerHTML = `
     <div class="brand" style="top:250px"><div class="name bold neon-text" style="font-size:64px">Blendy Play</div>
-      <div class="sub" style="font-size:40px">${broken ? "You broke it. You're in." : "Something new is locked in here..."}</div></div>
+      <div class="sub" style="font-size:40px">${broken ? "You cracked the story. Now break the real one." : "Something new is locked in here..."}</div></div>
     <div class="case${broken ? " broken" : ""}">
       <div class="sign top bold">${broken ? "EARLY ACCESS" : "IN CASE OF BOREDOM"}</div>
       <div class="prize">
         ${broken ? `
           <div class="v bold neon-text" style="font-size:118px;line-height:1.05">New release</div>
-          <div class="t bold" style="font-size:52px;color:#fff">is yours before everyone else</div>
+          <div class="t bold" style="font-size:52px;color:#fff">is waiting behind the real glass</div>
           <ul class="new" style="margin-top:26px">
             <li>Asks "Still watching?"</li>
             <li>Takes you home when a film ends</li>
@@ -122,10 +122,10 @@ if (v === "launch") {
           <div class="t">The new Blendy Play</div>`}
       </div>
       ${broken ? '<svg class="cracks" id="cracks"></svg>' : '<div class="glass"></div>'}
-      <div class="sign bottom bold">${broken ? "ENJOY" : "BREAK GLASS"}</div>
+      <div class="sign bottom bold">${broken ? "3 QUESTIONS AWAY" : "BREAK GLASS"}</div>
     </div>
     ${broken ? `
-      <div class="cta" style="bottom:250px"><div class="label">Get it early at</div><div class="url bold neon-text">blendy.mainakimani.com</div></div>` : `
+      <div class="cta" style="bottom:250px"><div class="label">Break it early at</div><div class="url bold neon-text">blendy.mainakimani.com</div></div>` : `
       <div class="tap"><div class="big bold"><span class="finger"></span>Tap to break the glass</div>
         <div class="small">and get the next release early</div></div>`}`;
 

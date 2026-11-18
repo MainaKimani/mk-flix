@@ -9,9 +9,13 @@ Instagram and WhatsApp stories, 1080 × 1920 PNG.
 | `2b-glass-broken.png` | "Break the glass", frame 2: the glass broken, early access to the new release |
 
 Post 2a and 2b back to back: tapping a story moves to the next one, so the
-viewer's tap on 2a is what breaks the glass in 2b. On Instagram, put a Link
-sticker to `https://blendy.mainakimani.com` over the purple box (on 2b only
-for the second story).
+viewer's tap on 2a is what cracks the glass in 2b. 2b then sends people to the
+real glass on the site, where three film questions break it early. Post them
+before the glass on the downloads breaks for everyone; after that, post 1.
+
+On Instagram, put a Link sticker over the purple box:
+`https://blendy.mainakimani.com/#download` on 2b (it opens the page at the
+glass), and `https://blendy.mainakimani.com` on 1.
 
 The images are drawn by `stories.html`. To change the wording or prices,
 edit it and render each frame with headless Chrome, for example:
