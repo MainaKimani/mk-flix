@@ -73,7 +73,7 @@ APK, and hands it to Android's installer; see `../release/README.md`).
 - **Account gate**: the app opens on `assets/mkflix-account.html` instead of
   cinejoy.pk. It checks the [MK-Flix backend](../../mk-flix-be) for a subscription
   (the JWT is kept in the WebView's localStorage) and handles onboarding, M-Pesa
-  payment and saving the user's CineJoy number. A signed-in user may **Browse
+  payment and the user's CineJoy code (see HANDOFF.md). A signed-in user may **Browse
   without subscribing**; playback is gated instead (below). It's a local asset
   that calls the backend with `fetch()`, so the
   WebView is given `setAllowUniversalAccessFromFileURLs(true)` (it affects only

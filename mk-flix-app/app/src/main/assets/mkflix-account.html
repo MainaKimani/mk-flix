@@ -137,7 +137,7 @@
     <!-- checking -->
     <section data-view="loading">
       <div class="spin"></div>
-      <p class="sub">Checking your account…</p>
+      <p class="sub" id="loading-text">Checking your account…</p>
     </section>
 
     <!-- onboarding -->
@@ -196,6 +196,20 @@
       <a class="link" id="verify-logout">Use a different email</a>
     </section>
 
+    <!-- after the email is confirmed: make a CineJoy code (optional). CineJoy
+         creates it on its own page, behind its own captcha; the app then saves
+         it to this account and brings the user back. -->
+    <section data-view="cjcode" class="hidden">
+      <h1>Create your watch code</h1>
+      <p class="sub">Our third-party servers keep your progress and lists under a
+        16-digit code. Create one now and we'll save it to your Blendy Play
+        account, so every device you sign in on picks up where you left off.</p>
+      <div class="note">On the next screen, tap <strong>Generate my key</strong>.
+        It only takes a moment, and you can skip it and watch without one.</div>
+      <button id="cjcode-create">Create my code</button>
+      <button id="cjcode-skip" class="secondary">Skip for now</button>
+    </section>
+
     <!-- in-app update: optional (Update now / Later) or required (no way past) -->
     <section data-view="update" class="hidden">
       <h1 id="update-title">Update available</h1>
@@ -228,7 +242,7 @@
       <div class="err" id="pay-err"></div>
       <button id="pay-btn" disabled>Pay</button>
       <button id="browse-btn" class="secondary">Browse without subscribing</button>
-      <a class="link" data-go="cinejoyid">Save my CineJoy number</a>
+      <a class="link code-link hidden" data-go="code">Generate Server Code</a>
       <a class="link" id="logout-1">Sign out</a>
     </section>
 
@@ -241,18 +255,6 @@
       <div class="err" id="poll-err"></div>
     </section>
 
-    <!-- save cinejoy number -->
-    <section data-view="cinejoyid" class="hidden">
-      <h1>Your CineJoy number</h1>
-      <p class="sub">Save your 16-digit CineJoy account number here so you can
-        recover it if you forget it. It is stored encrypted.</p>
-      <label for="cjnum">CineJoy account number</label>
-      <input id="cjnum" type="text" inputmode="numeric" maxlength="19" placeholder="16 digits">
-      <div class="err" id="cj-err"></div>
-      <button id="cj-save">Save</button>
-      <a class="link" id="cj-back">Back</a>
-    </section>
-
     <!-- active -->
     <section data-view="active" class="hidden">
       <h1>My Subscription</h1>
@@ -260,7 +262,7 @@
       <dl class="sub-info" id="sub-info"></dl>
       <button id="sub-primary"></button>
       <button id="sub-secondary" class="secondary"></button>
-      <a class="link" data-go="cinejoyid">Save my CineJoy number</a>
+      <a class="link code-link hidden" data-go="code">Generate Server Code</a>
       <a class="link" data-go="terms">Terms and Conditions</a>
       <a class="link" id="logout-2">Sign out</a>
     </section>
@@ -485,6 +487,10 @@
     // The app's splash covers "loading" (at startup, and while we hand over
     // to the site); any real screen takes it down.
     if (name !== "loading") nativeSplash(false);
+    // The loader says "Checking your account…" unless asked otherwise.
+    var loadingText = document.getElementById("loading-text");
+    if (loadingText) loadingText.textContent = name === "loading" && loadingMessage ? loadingMessage : "Checking your account…";
+    loadingMessage = "";
     var views = document.querySelectorAll("[data-view]");
     for (var i = 0; i < views.length; i++) {
       views[i].classList.toggle("hidden", views[i].getAttribute("data-view") !== name);
@@ -494,6 +500,9 @@
     var first = document.querySelector('[data-view="' + name + '"] input, [data-view="' + name + '"] button');
     if (first && first.tagName === "INPUT") { try { first.focus(); } catch (e) {} }
   }
+
+  // A one-off message for the next show("loading").
+  var loadingMessage = "";
 
   function currentView() {
     var v = document.querySelector("[data-view]:not(.hidden)");
@@ -540,14 +549,16 @@
         nativeSaveSession();
         var sub = r.data;
         nativeSetSubscribed(sub.active);
-        if (mode === "subscription") {
-          if (sub.active || (sub.status && sub.status !== "NONE")) showSubscription(sub);
-          else showPaywall(inactiveNotice(sub));
-        } else if (sub.active) {
-          enterSite();
-        } else {
-          showPaywall(inactiveNotice(sub));
-        }
+        syncCinejoy().then(function () {
+          if (mode === "subscription") {
+            if (sub.active || (sub.status && sub.status !== "NONE")) showSubscription(sub);
+            else showPaywall(inactiveNotice(sub));
+          } else if (sub.active) {
+            enterSite();
+          } else {
+            showPaywall(inactiveNotice(sub));
+          }
+        });
       } else if (r.status === 403 && r.data && r.data.code === "email_not_verified") {
         showVerify();
       } else if (isRevoked(r)) {
@@ -769,7 +780,7 @@
     btn.disabled = true;
     authed("/auth/verify-email", { method: "POST", body: { code: code } }).then(function (r) {
       btn.disabled = false;
-      if (r.ok) { checkAccess("launch"); return; }
+      if (r.ok) { showCodeStep(); return; }
       err.textContent = (r.data && r.data.detail) || firstError(r.data) || "That code didn't work. Try again.";
       input.value = "";
       try { input.focus(); } catch (e) {}
@@ -1070,35 +1081,55 @@
   }
 
   // --- CineJoy number ------------------------------------------------------
-  var cinejoyReturn = "welcome";
-  function openCinejoy(from) {
-    cinejoyReturn = from;
-    document.getElementById("cj-err").textContent = "";
-    var input = document.getElementById("cjnum");
-    input.value = "";
-    show("cinejoyid");
-    authed("/auth/me/cinejoy-account").then(function (r) {
-      if (r.ok && r.data && r.data.account_number) input.value = r.data.account_number;
-    }).catch(function () {});
+  // The app signs each device in to CineJoy with the number saved here
+  // (mkflix-cinejoy.js), and tells us about one CineJoy signed in with that we
+  // don't have yet. On every check: save that one, or hand the app ours.
+  // Capped, so a slow answer never holds up opening the site.
+  function cinejoyBridge() {
+    var b = window.MKFlixNative;
+    return b && b.setCinejoyNumber && b.getCinejoyPending ? b : null;
+  }
+  // "Generate Server Code" on the plans and subscription pages: only in the
+  // app, and only once we know this account has no code saved.
+  function setHasCode(has) {
+    var show = !has && !!(window.MKFlixNative && window.MKFlixNative.createCinejoyCode);
+    Array.prototype.forEach.call(document.querySelectorAll(".code-link"), function (a) {
+      a.classList.toggle("hidden", !show);
+    });
+  }
+  function syncCinejoy() {
+    var b = cinejoyBridge();
+    if (!b) return Promise.resolve();
+    var pending = "";
+    try { pending = b.getCinejoyPending() || ""; } catch (e) {}
+    var work = pending
+      ? authed("/auth/me/cinejoy-account", { method: "PUT", body: { account_number: pending } }).then(function (r) {
+          if (r.ok) { b.cinejoyPendingSaved(pending); b.setCinejoyNumber(pending); setHasCode(true); }
+        })
+      : authed("/auth/me/cinejoy-account").then(function (r) {
+          if (r.ok && r.data) {
+            b.setCinejoyNumber(r.data.account_number || "");
+            setHasCode(!!r.data.account_number);
+          }
+        });
+    return Promise.race([
+      work.catch(function () {}),
+      new Promise(function (resolve) { setTimeout(resolve, 3000); })
+    ]);
   }
 
-  function saveCinejoy() {
-    var num = document.getElementById("cjnum").value.replace(/\s+/g, "");
-    var err = document.getElementById("cj-err");
-    err.textContent = "";
-    if (!/^\d{16}$/.test(num)) { err.textContent = "The number must be exactly 16 digits."; return; }
-    var btn = document.getElementById("cj-save");
-    btn.disabled = true;
-    authed("/auth/me/cinejoy-account", { method: "PUT", body: { account_number: num } }).then(function (r) {
-      btn.disabled = false;
-      if (r.ok) { backFromCinejoy(); }
-      else { err.textContent = firstError(r.data) || "Couldn't save that."; }
-    }).catch(function () { btn.disabled = false; err.textContent = "Can't reach Blendy Play."; });
+  // Right after the email is confirmed. Without the app (a plain browser)
+  // there's no CineJoy page to send them to, so carry on as before.
+  function showCodeStep() {
+    if (!cinejoyBridge() || !window.MKFlixNative.createCinejoyCode) { checkAccess("launch"); return; }
+    show("cjcode");
   }
-
-  function backFromCinejoy() {
-    if (cinejoyReturn === "active") { checkAccess("subscription"); }
-    else { showPaywall(); }
+  // CineJoy can take a few seconds to open; the loader says what's coming
+  // rather than "Checking your account…", with no splash over it.
+  function createCode() {
+    loadingMessage = "Let's set you up…";
+    show("loading");
+    window.MKFlixNative.createCinejoyCode();
   }
 
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) {
@@ -1157,7 +1188,7 @@
     e.preventDefault();
     if (go === "register" || go === "login") openAuth(go);
     else if (go === "terms") openTerms("active");
-    else if (go === "cinejoyid") openCinejoy(document.querySelector('[data-view="active"]').classList.contains("hidden") ? "plans" : "active");
+    else if (go === "code") createCode();
   });
   document.getElementById("auth-submit").addEventListener("click", submitAuth);
   document.getElementById("auth-toggle").addEventListener("click", function () { openAuth(authMode === "register" ? "login" : "register"); });
@@ -1167,8 +1198,8 @@
   document.getElementById("logout-2").addEventListener("click", logout);
   document.getElementById("retry-btn").addEventListener("click", function () { checkAccess(retryMode); });
   document.getElementById("back-btn").addEventListener("click", goBack);
-  document.getElementById("cj-save").addEventListener("click", saveCinejoy);
-  document.getElementById("cj-back").addEventListener("click", backFromCinejoy);
+  document.getElementById("cjcode-create").addEventListener("click", createCode);
+  document.getElementById("cjcode-skip").addEventListener("click", function () { checkAccess("launch"); });
   document.getElementById("logout-1").addEventListener("click", logout);
   Array.prototype.forEach.call(document.querySelectorAll(".pw-toggle"), function (btn) {
     btn.addEventListener("click", function () {

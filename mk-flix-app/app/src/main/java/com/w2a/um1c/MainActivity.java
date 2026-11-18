@@ -126,6 +126,9 @@ public class MainActivity extends Activity {
     // "Still watching?" after 90 idle minutes of autoplay, and the card at the
     // end of a film (assets/mkflix-player.js).
     private String playerJs = "";
+    // mkflix-cinejoy.js: one sign-in for Blendy Play and CineJoy (see the
+    // CineJoy account section).
+    private String cinejoyJs = "";
     private final Subscription subscription = new Subscription();
 
     // In-app updates (see AppUpdater). pageUrl lets the bridge serve update
@@ -198,6 +201,7 @@ public class MainActivity extends Activity {
         lockJs = readAsset("mkflix-lock.js");
         noticeJs = readAsset("mkflix-notice.js");
         playerJs = readAsset("mkflix-player.js");
+        cinejoyJs = readAsset("mkflix-cinejoy.js");
         apiBaseConfig = readConfigValue("apiBase");
         updater = new AppUpdater(this, readConfigValue("updateUrl"));
         installReceiver = AppUpdater.installStatusReceiver(this, message -> sendUpdateResult(false, null, message));
@@ -319,6 +323,9 @@ public class MainActivity extends Activity {
                 if (!lockJs.isEmpty() && isCineJoyUrl(url)) {
                     view.evaluateJavascript(lockJs, null);
                 }
+                if (!cinejoyJs.isEmpty() && isCineJoyUrl(url)) {
+                    view.evaluateJavascript(cinejoyJs, null);
+                }
             }
 
             @Override
@@ -421,6 +428,11 @@ public class MainActivity extends Activity {
                         }
                         if (!playerJs.isEmpty()) {
                             view.evaluateJavascript(playerJs, null);
+                        }
+                        // Again in case commit-visible was skipped; it guards
+                        // against running twice.
+                        if (!cinejoyJs.isEmpty()) {
+                            view.evaluateJavascript(cinejoyJs, null);
                         }
                     }
                 } catch (Exception ignored) {
@@ -1654,6 +1666,7 @@ public class MainActivity extends Activity {
                         // by a password change): stop playback and show the
                         // gate, which asks to sign in again.
                         clear();
+                        cinejoySignOut();
                         openPaywall();
                     } else if (result != null) {
                         active = result;
@@ -1750,6 +1763,87 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void clearSession() {
             subscription.clear();
+            cinejoySignOut();
+        }
+
+        // --- CineJoy account (see the CineJoy account section) ---
+
+        /** The gate: the number saved on the Blendy Play account ("" for none). */
+        @JavascriptInterface
+        public void setCinejoyNumber(String number) {
+            if (onGate()) {
+                cinejoyPrefs().edit().putString(CJ_NUMBER, validCinejoyNumber(number)).apply();
+            }
+        }
+
+        /** The gate: a number CineJoy gave this device that Blendy Play hasn't saved yet. */
+        @JavascriptInterface
+        public String getCinejoyPending() {
+            return onGate() ? cinejoyPrefs().getString(CJ_PENDING, "") : "";
+        }
+
+        /** The gate saved it; kept if a newer one arrived meanwhile. */
+        @JavascriptInterface
+        public void cinejoyPendingSaved(String number) {
+            if (onGate() && cinejoyPrefs().getString(CJ_PENDING, "").equals(number)) {
+                cinejoyPrefs().edit().remove(CJ_PENDING).apply();
+            }
+        }
+
+        /** The gate: open CineJoy on its "create a code" panel. */
+        @JavascriptInterface
+        public void createCinejoyCode() {
+            if (onGate()) {
+                cinejoyPrefs().edit().putBoolean(CJ_CREATE, true).apply();
+                loadOnUiThread(CINEJOY_CREATE_URL);
+            }
+        }
+
+        /** mkflix-cinejoy.js: the saved number, to sign this device in to CineJoy. */
+        @JavascriptInterface
+        public String getCinejoyNumber() {
+            return isCineJoyUrl(pageUrl) ? cinejoyPrefs().getString(CJ_NUMBER, "") : "";
+        }
+
+        /** mkflix-cinejoy.js: whether to open the create panel (true once). */
+        @JavascriptInterface
+        public boolean takeCinejoyCreate() {
+            if (!isCineJoyUrl(pageUrl) || !cinejoyPrefs().getBoolean(CJ_CREATE, false)) {
+                return false;
+            }
+            cinejoyPrefs().edit().remove(CJ_CREATE).apply();
+            return true;
+        }
+
+        /** mkflix-cinejoy.js: whether to sign CineJoy out (true once). */
+        @JavascriptInterface
+        public boolean takeCinejoySignOut() {
+            if (!isCineJoyUrl(pageUrl) || !cinejoyPrefs().getBoolean(CJ_SIGN_OUT, false)) {
+                return false;
+            }
+            cinejoyPrefs().edit().remove(CJ_SIGN_OUT).apply();
+            return true;
+        }
+
+        /**
+         * mkflix-cinejoy.js: CineJoy signed this device in to an account the
+         * app didn't know (a code created or keyed in on CineJoy). Kept until
+         * the gate saves it to the Blendy Play account.
+         */
+        @JavascriptInterface
+        public void cinejoySignedIn(String number) {
+            String n = validCinejoyNumber(number);
+            if (isCineJoyUrl(pageUrl) && !n.isEmpty()) {
+                cinejoyPrefs().edit().putString(CJ_NUMBER, n).putString(CJ_PENDING, n).apply();
+            }
+        }
+
+        /** mkflix-cinejoy.js: the code was created; back to the subscription page. */
+        @JavascriptInterface
+        public void cinejoyCreated() {
+            if (isCineJoyUrl(pageUrl)) {
+                openSubscription();
+            }
         }
 
         @JavascriptInterface
@@ -1881,6 +1975,41 @@ public class MainActivity extends Activity {
                 }
             });
         }
+    }
+
+    // --- CineJoy account ------------------------------------------------------
+
+    /*
+     * One sign-in for both. CineJoy keeps progress and lists under a 16-digit
+     * number (its only credential), and Blendy Play saves that number on the
+     * user's account. mkflix-cinejoy.js, on cinejoy.pk:
+     *   - signs the device in to CineJoy with the saved number;
+     *   - reports a number CineJoy signed in with that the app didn't know
+     *     (created or keyed in there), which the gate then saves (CJ_PENDING);
+     *   - after the email is confirmed, opens CineJoy's own "create" panel
+     *     (CJ_CREATE), where the user passes CineJoy's captcha themselves;
+     *   - signs CineJoy out when Blendy Play signs out (CJ_SIGN_OUT).
+     * The CineJoy account stays optional: with no number nothing happens.
+     */
+    private static final String CINEJOY_CREATE_URL = "https://cinejoy.pk/settings";
+    private static final String CJ_NUMBER = "cjNumber";
+    private static final String CJ_PENDING = "cjPending";
+    private static final String CJ_CREATE = "cjCreate";
+    private static final String CJ_SIGN_OUT = "cjSignOut";
+
+    private SharedPreferences cinejoyPrefs() {
+        return getSharedPreferences("mkflix", MODE_PRIVATE);
+    }
+
+    private static String validCinejoyNumber(String number) {
+        String n = number == null ? "" : number.replaceAll("\\s+", "");
+        return n.matches("\\d{16}") ? n : "";
+    }
+
+    /** Forget the number and sign CineJoy out the next time a page there loads. */
+    private void cinejoySignOut() {
+        cinejoyPrefs().edit().remove(CJ_NUMBER).remove(CJ_PENDING).remove(CJ_CREATE)
+                .putBoolean(CJ_SIGN_OUT, true).apply();
     }
 
     private boolean onGate() {

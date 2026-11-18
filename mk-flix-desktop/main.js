@@ -114,6 +114,8 @@ const lockJs = readOptional('mkflix-lock.js');
 const noticeJs = readOptional('mkflix-notice.js');
 // "Still watching?" after 90 idle minutes of autoplay, and the end-of-film card.
 const playerJs = readOptional('mkflix-player.js');
+// One sign-in for Blendy Play and CineJoy (see "CineJoy account" below).
+const cinejoyJs = readOptional('mkflix-cinejoy.js');
 ipcMain.on('mkflix:logo-css', (event) => {
   event.returnValue = logoCss;
 });
@@ -298,6 +300,7 @@ async function refreshSubscription() {
       // playback and send every window to the gate, which shows sign-in.
       mkSession = { apiBase: '', access: '', refresh: '' };
       subscribed = false;
+      cinejoySignOut();
       for (const win of BrowserWindow.getAllWindows()) {
         win.loadFile(path.join(__dirname, 'mkflix-account.html'));
       }
@@ -336,6 +339,92 @@ ipcMain.on('mkflix:splash', (event, on) => {
 ipcMain.on('mkflix:clear-session', () => {
   mkSession = { apiBase: '', access: '', refresh: '' };
   subscribed = false;
+  cinejoySignOut();
+});
+
+// ---- CineJoy account ----
+// One sign-in for both. CineJoy keeps progress and lists under a 16-digit
+// number (its only credential), and Blendy Play saves that number on the
+// user's account. mkflix-cinejoy.js, on cinejoy.pk:
+//   - signs the app in to CineJoy with the saved number;
+//   - reports a number CineJoy signed in with that we didn't know (created
+//     or keyed in there), which the gate then saves (pending);
+//   - after the email is confirmed, opens CineJoy's own "create" panel
+//     (create), where the user passes CineJoy's captcha themselves;
+//   - signs CineJoy out when Blendy Play signs out (signOut).
+// The CineJoy account stays optional: with no number nothing happens. Kept in
+// the app's data folder, which only this user can read.
+const CINEJOY_CREATE_URL = 'https://cinejoy.pk/settings';
+const cinejoyFile = () => path.join(app.getPath('userData'), 'cinejoy.json');
+let cinejoyCache = null;
+function cinejoyState() {
+  if (!cinejoyCache) {
+    try { cinejoyCache = JSON.parse(fs.readFileSync(cinejoyFile(), 'utf8')) || {}; } catch (e) { cinejoyCache = {}; }
+  }
+  return cinejoyCache;
+}
+function cinejoyUpdate(changes) {
+  cinejoyCache = { ...cinejoyState(), ...changes };
+  try { fs.writeFileSync(cinejoyFile(), JSON.stringify(cinejoyCache), { mode: 0o600 }); } catch (e) { /* kept for this run */ }
+}
+function validCinejoyNumber(n) {
+  const s = String(n == null ? '' : n).replace(/\s+/g, '');
+  return /^\d{16}$/.test(s) ? s : '';
+}
+function cinejoySignOut() {
+  cinejoyUpdate({ number: '', pending: '', create: false, signOut: true });
+}
+function fromCinejoy(event) {
+  const url = (event.senderFrame && event.senderFrame.url) || '';
+  const host = hostOf(url);
+  return !!host && isCineJoy(host);
+}
+// The gate: the number saved on the Blendy Play account ("" for none).
+ipcMain.on('mkflix:cj-set-number', (event, n) => {
+  if (fromGate(event)) cinejoyUpdate({ number: validCinejoyNumber(n) });
+});
+// The gate: a number CineJoy gave this app that Blendy Play hasn't saved yet.
+ipcMain.on('mkflix:cj-pending', (event) => {
+  event.returnValue = fromGate(event) ? (cinejoyState().pending || '') : '';
+});
+// The gate saved it; kept if a newer one arrived meanwhile.
+ipcMain.on('mkflix:cj-pending-saved', (event, n) => {
+  if (fromGate(event) && cinejoyState().pending === n) cinejoyUpdate({ pending: '' });
+});
+// The gate: open CineJoy on its "create a code" panel.
+ipcMain.on('mkflix:cj-create', (event) => {
+  if (!fromGate(event)) return;
+  cinejoyUpdate({ create: true });
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win) win.loadURL(CINEJOY_CREATE_URL);
+});
+// mkflix-cinejoy.js: the saved number, to sign the app in to CineJoy.
+ipcMain.on('mkflix:cj-number', (event) => {
+  event.returnValue = fromCinejoy(event) ? (cinejoyState().number || '') : '';
+});
+// mkflix-cinejoy.js: whether to open the create panel, or to sign CineJoy
+// out (each true once).
+ipcMain.on('mkflix:cj-take-create', (event) => {
+  const yes = fromCinejoy(event) && cinejoyState().create === true;
+  if (yes) cinejoyUpdate({ create: false });
+  event.returnValue = yes;
+});
+ipcMain.on('mkflix:cj-take-sign-out', (event) => {
+  const yes = fromCinejoy(event) && cinejoyState().signOut === true;
+  if (yes) cinejoyUpdate({ signOut: false });
+  event.returnValue = yes;
+});
+// mkflix-cinejoy.js: CineJoy signed in to a number we didn't know. Kept until
+// the gate saves it to the Blendy Play account.
+ipcMain.on('mkflix:cj-signed-in', (event, n) => {
+  const num = validCinejoyNumber(n);
+  if (fromCinejoy(event) && num) cinejoyUpdate({ number: num, pending: num });
+});
+// mkflix-cinejoy.js: the code was created; back to the subscription page.
+ipcMain.on('mkflix:cj-created', (event) => {
+  if (!fromCinejoy(event)) return;
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win) win.loadFile(path.join(__dirname, 'mkflix-account.html'), { hash: 'subscription' });
 });
 ipcMain.on('mkflix:refresh-subscription', () => { refreshSubscription(); });
 ipcMain.on('mkflix:is-subscribed', (event) => { event.returnValue = subscribed; });
@@ -371,6 +460,7 @@ app.on('web-contents-created', (_event, contents) => {
       if (lockJs) contents.executeJavaScript(lockJs).catch(() => {});
       if (noticeJs) contents.executeJavaScript(noticeJs).catch(() => {});
       if (playerJs) contents.executeJavaScript(playerJs).catch(() => {});
+      if (cinejoyJs) contents.executeJavaScript(cinejoyJs).catch(() => {});
     }
   });
   // A page that fails to load would leave a blank black window, so show

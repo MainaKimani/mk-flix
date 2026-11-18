@@ -46,6 +46,18 @@ contextBridge.exposeInMainWorld('MKFlixNative', {
   },
   dismissUpdate: (version) => ipcRenderer.send('mkflix:update-later', version),
   openDownloads: () => ipcRenderer.send('mkflix:open-downloads'),
+  // One sign-in for Blendy Play and CineJoy (main.js, "CineJoy account").
+  // The gate's calls:
+  setCinejoyNumber: (n) => ipcRenderer.send('mkflix:cj-set-number', String(n || '')),
+  getCinejoyPending: () => ipcRenderer.sendSync('mkflix:cj-pending'),
+  cinejoyPendingSaved: (n) => ipcRenderer.send('mkflix:cj-pending-saved', String(n || '')),
+  createCinejoyCode: () => ipcRenderer.send('mkflix:cj-create'),
+  // mkflix-cinejoy.js's calls, on cinejoy.pk:
+  getCinejoyNumber: () => ipcRenderer.sendSync('mkflix:cj-number'),
+  takeCinejoyCreate: () => ipcRenderer.sendSync('mkflix:cj-take-create'),
+  takeCinejoySignOut: () => ipcRenderer.sendSync('mkflix:cj-take-sign-out'),
+  cinejoySignedIn: (n) => ipcRenderer.send('mkflix:cj-signed-in', String(n || '')),
+  cinejoyCreated: () => ipcRenderer.send('mkflix:cj-created'),
 });
 
 let info = null;

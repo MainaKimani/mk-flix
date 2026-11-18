@@ -37,6 +37,7 @@
       "mkflix-lock.js",
       "mkflix-notice.js",
       "mkflix-player.js",
+      "mkflix-cinejoy.js",
       "mkflix-config.json",
       "package.json"
     ],
