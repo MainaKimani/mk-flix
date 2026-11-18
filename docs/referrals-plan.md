@@ -1,4 +1,4 @@
-# Referrals: plan for 1.8.0
+# Referrals: plan for 1.7.1
 
 Ambassadors (people marketing Blendy Play for a commission) each get a referral code. A
 customer types it in when creating their Blendy Play account, and the ambassador earns **20% of every payment that customer makes in their first 12 months**.
@@ -9,7 +9,8 @@ ambassador, and monthly reports. Ambassadors sign in to the portal and see their
 dashboard: their referrals (emails masked), those customers' subscriptions, the revenue they
 brought in, and their commission, with the report also emailed to them each month.
 
-Status: planned, not started. Target: release 1.8.0.
+Status: built for release 1.7.1 (moved forward from 1.8.0). Where the build differs from the
+original plan, the text below describes what was built.
 
 ## Decisions
 
@@ -29,7 +30,7 @@ Status: planned, not started. Target: release 1.8.0.
 | Customer emails shown to ambassadors | Masked on the server, e.g. `wan***iku@gmail.com`. Phone numbers and names are never shown |
 | Payouts | Paid by hand over M-Pesa and recorded in the dashboard. Automatic B2C payouts are out of scope |
 | What earns commission | Only successful M-Pesa payments. Free or admin-granted access earns nothing |
-| Existing customers | Not linked to anyone. Referrals start from 1.8.0 |
+| Existing customers | Not linked to anyone automatically. Referrals start from 1.7.1; a super-admin can link one by hand |
 | Months | Calendar months in Nairobi time (EAT), by payment date |
 
 ## How it fits the current system
@@ -76,8 +77,13 @@ Status: planned, not started. Target: release 1.8.0.
 | `referral`, `payment` | `payment` is unique, so a payment can't earn twice |
 | `payment_amount`, `rate`, `amount` | Copied at the time the commission is earned. `amount` = `payment_amount` x `rate`, rounded to the shilling |
 | `month` | First day of the month the payment was made, in EAT, for reports |
-| `status` | `earned`, `reversed` (the payment was reversed or refunded), `paid` |
-| `payout` | FK to `Payout` once paid |
+| `status` | `earned` or `reversed` (the payment was refunded) |
+| `reversed_at`, `reversal_reason` | When and why it was reversed |
+
+Lines aren't matched to payouts one by one. Payouts are a running ledger: what an ambassador
+is owed is everything earned, less reversals, less every payout recorded. A reversal after a
+payout therefore comes off the next payout by itself, and the balance can go negative until
+new commission covers it.
 
 **Payout**: what you actually sent the ambassador.
 
@@ -92,16 +98,16 @@ Status: planned, not started. Target: release 1.8.0.
 - **Sign-up**: `RegisterSerializer` takes an optional `referral_code`. It is trimmed and
   upper-cased, then looked up among active ambassadors. An unknown or inactive code is rejected
   with a clear field error ("That referral code isn't valid"), so the customer can fix it or
-  leave the field empty; it does not silently create the account without the referral. A
+  leave the field empty; it does not silently create the account without the referral. An
   ambassador can't use their own code.
 - **Code check**: `GET /api/referrals/check?code=…` answers `{valid: true|false}` so the gate
   can confirm the code as it's typed. It returns nothing about the ambassador. Rate-limited.
 - **Earning**: wherever a payment is marked successful today, a hook creates the commission
   line. On a referred customer's first successful payment it also sets the 12-month window.
   Payments after `window_ends_at` earn nothing.
-- **Reversal**: when a payment that earned commission is reversed or refunded, its line becomes
-  `reversed`. If it was already paid out, the next payout is reduced by that amount and the
-  reports show it as a deduction.
+- **Reversal**: the system has no refund flow, so a super-admin reverses a line by hand from the
+  ambassador's page when they refund a payment. If it was already paid out, the next payout is
+  reduced by that amount and the reports show it as a reversal.
 - **Email masking**: done on the server, so full emails never reach an ambassador's browser. Keep
   the first 3 and last 3 characters of the part before the `@`, and the whole domain:
   `wanjikukamau@gmail.com` becomes `wan***mau@gmail.com`. For 6 characters or fewer, keep only
@@ -168,9 +174,12 @@ reports on the month just ended (on 1 March it covers February).
 - A `MonthlyReportEmail` row (recipient, kind, month, sent at) is written for each email that
   goes out, so running the job twice doesn't send anything twice. The admin dashboard shows
   which reports went out for each month, with a Resend button.
-- Sending goes through `notifications.email` like the other emails. `QueuedEmail` has no
-  attachments today, so it gains an optional attachment (file name, content type, content)
-  for retries. Report emails don't expire.
+- The job only queues the emails; the every-minute `send_queued_emails` job sends them and
+  retries failures. Sending from the monthly job itself, in background threads, could lose an
+  email when the job exits first. `QueuedEmail` gained an optional attachment (file name,
+  content type, content) so the Excel file survives retries. Report emails don't expire.
+- The super-admin's "commission" figure uses the same rule as each ambassador's figures:
+  commission earned from the month's payments, less anything reversed during the month.
 - DEPLOY.md gets the new cron line next to `send_queued_emails`:
   `0 9 1 * *` if the server clock is on EAT, or `0 6 1 * *` if it's on UTC.
 
@@ -194,7 +203,7 @@ row is frozen and columns are sized to fit.
   it's fixed or cleared.
 - It works with a TV remote: the field is in the focus order, and the on-screen keyboard is
   fine for letters and digits.
-- The gate is shared by all four apps, so this ships as an app release: **1.8.0**.
+- The gate is shared by all four apps, so this ships as an app release: **1.7.1**.
 - The APKs are installed from the website, not a store, so a referral link can't carry the
   code through the install. Customers type it. The portal can still accept `?ref=CODE` on its
   home page and show "Your referral code: CODE" by the downloads, so it's easy to copy.
@@ -233,12 +242,12 @@ row is frozen and columns are sized to fit.
   but not change; super-admins can change.
 - Months: payments near midnight EAT land in the right month.
 
-## Out of scope for 1.8.0
+## Out of scope for 1.7.1
 
 - Automatic M-Pesa (B2C) payouts.
 - Customer discounts for using a code.
 - Ambassadors creating their own accounts or codes.
-- Linking customers who signed up before 1.8.0.
+- Linking customers who signed up before 1.7.1 automatically.
 - Multi-level referrals (ambassadors recruiting ambassadors).
 
 ## Rough size
