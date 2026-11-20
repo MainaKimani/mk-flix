@@ -48,6 +48,8 @@
   p.sub { color: var(--muted); font-size: 14px; line-height: 1.5; margin: 0 0 18px; text-align: center; }
   .note { background: rgba(0,229,255,0.07); border: 1px solid rgba(0,229,255,0.25);
     border-radius: 12px; padding: 12px 14px; font-size: 13px; color: #cdeef6; line-height: 1.5; margin: 0 0 18px; }
+  /* The plan ends within a day (3 hours for a daily pass). */
+  .note.warn { background: rgba(255,183,77,0.08); border-color: rgba(255,183,77,0.35); color: #ffe2b8; }
   label { display: block; font-size: 13px; color: var(--muted); margin: 14px 0 6px; }
   input { width: 100%; padding: 13px 14px; font-size: 15px; color: var(--text);
     background: #141420; border: 1px solid var(--line); border-radius: 11px; outline: none; }
@@ -256,6 +258,36 @@
       <a class="link" id="logout-1">Sign out</a>
     </section>
 
+    <!-- one-tap renew: the plan last paid for, from the number last used
+         (GET /me/subscription "renew"). The Terms box shows only when the
+         Terms changed since that payment. -->
+    <section data-view="renew" class="hidden">
+      <h1>Renew your plan</h1>
+      <p class="sub">We'll send an M-Pesa prompt to your phone. The time is added
+        to your plan as soon as you approve it.</p>
+      <div class="note hidden" id="renew-note" role="status"></div>
+      <dl class="sub-info" id="renew-info"></dl>
+      <label class="agree hidden" for="renew-terms-ok" id="renew-terms">
+        <input id="renew-terms-ok" type="checkbox">
+        <span>Our Terms have changed since your last payment. I have read and agree to the
+          <a href="#" id="renew-terms-link">Terms and Conditions</a>.</span>
+      </label>
+      <div class="err" id="renew-err"></div>
+      <button id="renew-pay">Pay with M-Pesa</button>
+      <a class="link" id="renew-change">Change plan or number</a>
+      <a class="link hidden" id="renew-browse">Browse without subscribing</a>
+    </section>
+
+    <!-- at app start, when the plan ends within a day (3 hours for a daily
+         pass): once per app start, then on to the site by itself -->
+    <section data-view="ending" class="hidden">
+      <h1>Your plan ends soon</h1>
+      <p class="sub" id="ending-text"></p>
+      <button id="ending-renew"></button>
+      <button id="ending-continue" class="secondary">Continue to Blendy Play</button>
+      <p class="hint retry-ref" id="ending-count" aria-live="off"></p>
+    </section>
+
     <!-- paying -->
     <section data-view="paying" class="hidden">
       <div class="spin"></div>
@@ -312,11 +344,11 @@
         <p>5.3 Tell us promptly at blendyplay@mainakimani.com if you believe your account has been used without your permission.</p>
         <h3>6. Subscriptions and payments</h3>
         <p>6.1 <strong>Plans.</strong> We currently offer:</p>
-        <table><tr><th>Plan</th><th>Price</th><th>Access</th></tr><tr><td>Weekly</td><td>KES 149</td><td>7 days</td></tr><tr><td>Monthly</td><td>KES 459</td><td>30 days</td></tr></table>
+        <table><tr><th>Plan</th><th>Price</th><th>Access</th></tr><tr><td>Daily</td><td>KES 29</td><td>24 hours</td></tr><tr><td>Weekly</td><td>KES 149</td><td>7 days</td></tr><tr><td>Monthly</td><td>KES 459</td><td>30 days</td></tr></table>
         <p>Prices include any applicable taxes. We may change prices for future payments, and will show the current price before you pay.</p>
         <p>6.2 <strong>What you pay for.</strong> Your subscription pays for the Blendy Play app experience: ad-free browsing and playback through the Blendy Play app, and the features of the app. It does not pay for, buy or license any content. Any fees charged by the third-party platform are separate.</p>
         <p>6.3 <strong>Paying with M-Pesa.</strong> Payments are made by M-Pesa. When you choose a plan, an M-Pesa prompt is sent to the Safaricom number you enter, and your subscription starts once Safaricom confirms the payment to us. Safaricom's own terms apply to the M-Pesa transaction itself.</p>
-        <p>6.4 <strong>No automatic renewal.</strong> Subscriptions do not renew automatically. We never charge you without a payment prompt that you approve on your phone. If you pay again while your subscription is still active, the new period is added on top of the time you have left.</p>
+        <p>6.4 <strong>No automatic renewal.</strong> Subscriptions do not renew automatically. We never charge you without a payment prompt that you approve on your phone. If you pay again while your subscription is still active, the new period is added on top of the time you have left. For weekly and monthly plans we email you a reminder the day before your subscription ends and when it has ended; you can turn these reminders off from the link in them or from your account on the Blendy Play website.</p>
         <p>6.5 <strong>Failed or cancelled payments.</strong> If you decline the M-Pesa prompt, it times out, or Safaricom reports the payment as failed, you are not charged and no subscription time is added. If money left your M-Pesa account but your subscription was not activated, contact us at blendyplay@mainakimani.com with your M-Pesa receipt number and we will resolve it.</p>
         <p>6.6 <strong>Refunds.</strong> Payments are non-refundable once the subscription period has started, except where a fault on our side prevents you from using Blendy Play, or where the law requires a refund. Note that clause 3.4 means outages on the third-party platform alone do not entitle you to a refund.</p>
         <h3>7. Acceptable use</h3>
@@ -364,7 +396,7 @@
   // Which wording of the Terms the user accepts when they tick the box; sent
   // with each payment. This names the copy built into this page; once the
   // live Terms load from the backend, termsVersion becomes theirs.
-  var TERMS_VERSION = "2026-11-17.1";
+  var TERMS_VERSION = "2026-11-20.1";
   var termsVersion = TERMS_VERSION;
 
   function apiBase() {
@@ -507,7 +539,7 @@
       views[i].classList.toggle("hidden", views[i].getAttribute("data-view") !== name);
     }
     var back = document.getElementById("back-btn");
-    if (back) back.classList.toggle("hidden", !(name === "plans" || name === "active"));
+    if (back) back.classList.toggle("hidden", !(name === "plans" || name === "active" || name === "renew"));
     var first = document.querySelector('[data-view="' + name + '"] input, [data-view="' + name + '"] button');
     if (first && first.tagName === "INPUT") { try { first.focus(); } catch (e) {} }
   }
@@ -524,7 +556,9 @@
   // subscription page; otherwise (and from the subscription page) return to the
   // site, i.e. back to browsing.
   function goBack() {
-    if (currentView() === "plans" && paywallReturn === "subscription") checkAccess("subscription");
+    var view = currentView();
+    if (view === "plans" && paywallReturn === "subscription") checkAccess("subscription");
+    else if (view === "renew" && renewReturn === "subscription") checkAccess("subscription");
     else gotoSite();
   }
 
@@ -576,7 +610,10 @@
             if (sub.active || (sub.status && sub.status !== "NONE")) showSubscription(sub);
             else showPaywall(inactiveNotice(sub));
           } else if (sub.active) {
-            enterSite();
+            if (endingSoon(sub) && !endingShown()) showEnding(sub);
+            else enterSite();
+          } else if (sub.renew) {
+            showRenew(sub.renew, "launch", endedNotice(sub));
           } else {
             showPaywall(inactiveNotice(sub));
           }
@@ -869,11 +906,30 @@
     return "There's no active subscription on this account. Choose a plan to start watching.";
   }
 
+  // Above the renew screen at app start: the plan to renew is already shown.
+  function endedNotice(sub) {
+    var end = periodEnd(sub);
+    return end
+      ? "Your plan ended " + whenEnded(end) + ". Renew it to keep watching."
+      : "Your plan has ended. Renew it to keep watching.";
+  }
+  function whenEnded(end) {
+    var time = end.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var day = new Date(end.getTime()); day.setHours(0, 0, 0, 0);
+    var diff = Math.round((today - day) / DAY_MS);
+    if (diff === 0) return "today at " + time;
+    if (diff === 1) return "yesterday at " + time;
+    return "on " + end.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+  }
+
   function showSubscription(sub) {
     var active = !!sub.active;
+    var soon = endingSoon(sub);
     var subNote = document.getElementById("sub-note");
-    subNote.textContent = takeCodeBusy();
+    subNote.textContent = [soon ? endingNotice(sub) : "", takeCodeBusy()].filter(Boolean).join(" ");
     subNote.classList.toggle("hidden", !subNote.textContent);
+    subNote.classList.toggle("warn", soon);
     var end = sub.current_period_end ? new Date(sub.current_period_end) : null;
     var labels = { ACTIVE: "Active", EXPIRED: "Expired", CANCELLED: "Cancelled", PENDING: "Pending" };
     var statusText = active ? "Active" : (labels[sub.status] || "Inactive");
@@ -889,9 +945,13 @@
     if (end) {
       var dateStr = end.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
       if (active) {
-        var days = Math.ceil((end.getTime() - Date.now()) / 86400000);
+        var msLeft = end.getTime() - Date.now();
+        var days = Math.ceil(msLeft / 86400000);
+        var hours = Math.ceil(msLeft / 3600000);
         rows.push(["Renews / expires", dateStr]);
-        rows.push(["Time remaining", days <= 0 ? "less than a day" : days + (days === 1 ? " day" : " days")]);
+        rows.push(["Time remaining", msLeft < 86400000
+          ? (hours <= 1 ? "less than an hour" : hours + " hours")
+          : days + (days === 1 ? " day" : " days")]);
       } else {
         rows.push(["Expired on", dateStr]);
       }
@@ -902,9 +962,18 @@
 
     var primary = document.getElementById("sub-primary");
     var secondary = document.getElementById("sub-secondary");
-    if (active) {
+    if (active && soon && sub.renew) {
+      primary.textContent = "Continue to Blendy Play"; primary.onclick = enterSite;
+      secondary.textContent = renewLabel(sub.renew);
+      secondary.onclick = function () { showRenew(sub.renew, "subscription"); };
+    } else if (active) {
       primary.textContent = "Continue to Blendy Play"; primary.onclick = enterSite;
       secondary.textContent = "Renew or change plan";
+      secondary.onclick = function () { showPaywall(soon ? endingNotice(sub) : ""); paywallReturn = "subscription"; };
+    } else if (sub.renew) {
+      primary.textContent = renewLabel(sub.renew);
+      primary.onclick = function () { showRenew(sub.renew, "subscription"); };
+      secondary.textContent = "Choose a different plan";
       secondary.onclick = function () { showPaywall(); paywallReturn = "subscription"; };
     } else {
       primary.textContent = "Choose a plan"; primary.onclick = showPaywall;
@@ -1026,6 +1095,7 @@
     var text = [takeCodeBusy(), typeof notice === "string" ? notice : ""].filter(Boolean).join(" ");
     note.textContent = text;
     note.classList.toggle("hidden", !text);
+    note.classList.remove("warn");
     document.getElementById("terms-ok").checked = false;
     updatePayButton();
     document.getElementById("pay-err").textContent = "";
@@ -1037,9 +1107,8 @@
       r.data.forEach(function (plan) {
         var b = document.createElement("button");
         b.className = "plan";
-        var cadence = { WEEK: "weekly", MONTH: "monthly" }[plan.interval] || plan.interval.toLowerCase();
         b.innerHTML = '<span><span class="name">' + esc(plan.name) + '</span><br>' +
-          '<span class="meta">Billed ' + esc(cadence) + '</span></span>' +
+          '<span class="meta">' + esc(planMeta(plan)) + '</span></span>' +
           '<span class="price">' + esc(plan.currency) + " " + esc(plan.price) + "</span>";
         b.addEventListener("click", function () { selectPlan(plan, b); });
         list.appendChild(b);
@@ -1078,7 +1147,7 @@
       var d = r.data;
       if (!r.ok || !d || typeof d.html !== "string" || !d.html ||
           !/^[A-Za-z0-9._-]{1,32}$/.test(d.version || "")) return;
-      if (d.version === termsVersion || (currentView() === "terms" && termsReturn === "plans")) return;
+      if (d.version === termsVersion || (currentView() === "terms" && termsReturn !== "active")) return;
       var when = "", m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d.last_updated || "");
       if (m) when = new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
       document.getElementById("terms-text").innerHTML =
@@ -1090,7 +1159,7 @@
   function openTerms(from) {
     termsReturn = from;
     loadTerms();
-    document.getElementById("terms-agree").classList.toggle("hidden", from !== "plans");
+    document.getElementById("terms-agree").classList.toggle("hidden", from === "active");
     show("terms");
     var text = document.getElementById("terms-text");
     text.scrollTop = 0;
@@ -1098,7 +1167,11 @@
   }
 
   function closeTerms(agreed) {
-    if (termsReturn === "plans") {
+    if (termsReturn === "renew") {
+      if (agreed) document.getElementById("renew-terms-ok").checked = true;
+      show("renew");
+      updateRenewButton();
+    } else if (termsReturn === "plans") {
       if (agreed) document.getElementById("terms-ok").checked = true;
       show("plans");
       updatePayButton();
@@ -1119,6 +1192,7 @@
     authed("/payments/mpesa/stk", { method: "POST", body: { plan_code: selectedPlan.code, phone_number: phone, terms_version: termsVersion } }).then(function (r) {
       btn.disabled = false;
       if (r.ok && r.data && r.data.payment) {
+        payFrom = "plans";
         show("paying");
         pollPayment(r.data.payment.id, 0);
       } else {
@@ -1127,11 +1201,159 @@
     }).catch(function () { btn.disabled = false; err.textContent = "Can't reach Blendy Play."; });
   }
 
+  // Where a payment that didn't go through sends the user back to.
+  var payFrom = "plans";
+  function payAgain() {
+    if (payFrom === "renew" && currentRenew) showRenew(currentRenew, renewReturn);
+    else showPaywall();
+  }
+
+  // --- Renewing ------------------------------------------------------------
+  // "Ends soon": within a day, or 3 hours for a daily pass (a day pass is
+  // always within a day of its end). Lifetime access has no end date.
+  var DAY_MS = 86400000;
+  function periodEnd(sub) {
+    var end = sub && sub.current_period_end ? new Date(sub.current_period_end) : null;
+    return end && !isNaN(end.getTime()) ? end : null;
+  }
+  function endingSoon(sub) {
+    var end = periodEnd(sub);
+    if (!sub || !sub.active || !end) return false;
+    var daily = sub.plan && sub.plan.interval === "DAY";
+    return end.getTime() - Date.now() <= (daily ? 3 * 3600000 : DAY_MS);
+  }
+  // "today at 14:30", "tomorrow at 09:00", or a date further out.
+  function whenText(end) {
+    var time = end.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var day = new Date(end.getTime()); day.setHours(0, 0, 0, 0);
+    var diff = Math.round((day - today) / DAY_MS);
+    if (diff === 0) return "today at " + time;
+    if (diff === 1) return "tomorrow at " + time;
+    return "on " + end.toLocaleDateString(undefined, { month: "long", day: "numeric" }) + " at " + time;
+  }
+  function endingNotice(sub) {
+    var name = sub.plan ? sub.plan.name + " " : "";
+    return "Your " + name + "plan ends " + whenText(periodEnd(sub)) + ". Renew now and the new time is added on top.";
+  }
+  // "KES 149", without ".00".
+  function money(currency, price) {
+    var n = Number(price);
+    return currency + " " + (isFinite(n) && n === Math.floor(n) ? String(n) : String(price));
+  }
+  function renewLabel(renew) {
+    return "Renew " + renew.plan.name + " \u2014 " + money(renew.plan.currency, renew.plan.price);
+  }
+  // Under a plan's name on the paywall. A daily pass is a pass, not a bill.
+  function planMeta(plan) {
+    if (plan.interval === "DAY") return "24 hours";
+    var cadence = { WEEK: "weekly", MONTH: "monthly" }[plan.interval] || String(plan.interval).toLowerCase();
+    return "Billed " + cadence;
+  }
+  function planLength(plan) {
+    if (plan.interval === "DAY" || plan.duration_days === 1) return "24 hours";
+    return plan.duration_days + " days";
+  }
+
+  var currentRenew = null;
+  var renewReturn = "launch";
+  // from: "launch" (an expired plan at app start; offers browsing) or
+  // "subscription" (the back arrow returns there).
+  function showRenew(renew, from, notice) {
+    currentRenew = renew;
+    renewReturn = from || "launch";
+    var note = document.getElementById("renew-note");
+    note.textContent = notice || "";
+    note.classList.toggle("hidden", !note.textContent);
+    document.getElementById("renew-info").innerHTML = [
+      ["Plan", esc(renew.plan.name) + " (" + esc(planLength(renew.plan)) + ")"],
+      ["Price", esc(money(renew.plan.currency, renew.plan.price))],
+      ["M-Pesa number", esc(renew.phone_masked)]
+    ].map(function (r) { return "<div><dt>" + r[0] + "</dt><dd>" + r[1] + "</dd></div>"; }).join("");
+    var needTerms = !renew.terms_agreed;
+    document.getElementById("renew-terms").classList.toggle("hidden", !needTerms);
+    document.getElementById("renew-terms-ok").checked = false;
+    if (needTerms) loadTerms();
+    document.getElementById("renew-browse").classList.toggle("hidden", renewReturn !== "launch");
+    document.getElementById("renew-err").textContent = "";
+    updateRenewButton();
+    show("renew");
+  }
+  function updateRenewButton() {
+    var needTerms = !!currentRenew && !currentRenew.terms_agreed;
+    document.getElementById("renew-pay").disabled = needTerms && !document.getElementById("renew-terms-ok").checked;
+  }
+  function payRenew() {
+    var err = document.getElementById("renew-err");
+    err.textContent = "";
+    var body = { renew: true };
+    if (currentRenew && !currentRenew.terms_agreed) {
+      if (!document.getElementById("renew-terms-ok").checked) { err.textContent = "Agree to the Terms and Conditions first."; return; }
+      body.terms_version = termsVersion;
+    }
+    var btn = document.getElementById("renew-pay");
+    btn.disabled = true;
+    authed("/payments/mpesa/stk", { method: "POST", body: body }).then(function (r) {
+      btn.disabled = false;
+      if (r.ok && r.data && r.data.payment) {
+        payFrom = "renew";
+        show("paying");
+        pollPayment(r.data.payment.id, 0);
+      } else if (r.data && r.data.renew) {
+        // Nothing to renew after all (the plan was withdrawn): the full list.
+        showPaywall(firstError(r.data));
+      } else {
+        err.textContent = firstError(r.data) || "Couldn't start the payment.";
+      }
+    }).catch(function () { btn.disabled = false; err.textContent = "Can't reach Blendy Play."; });
+  }
+  function changeRenew() {
+    var from = renewReturn;
+    showPaywall();
+    paywallReturn = from === "subscription" ? "subscription" : "site";
+  }
+
+  // The reminder at app start: once per app start (the gate reloads whenever
+  // the site sends the user back to it), then on to the site by itself.
+  var ENDING_WAIT_S = 8;
+  var endingTimer = null;
+  function endingShown() {
+    try { return sessionStorage.getItem("mkflix_ending_shown") === "1"; } catch (e) { return false; }
+  }
+  function showEnding(sub) {
+    try { sessionStorage.setItem("mkflix_ending_shown", "1"); } catch (e) {}
+    document.getElementById("ending-text").textContent = endingNotice(sub);
+    var renewBtn = document.getElementById("ending-renew");
+    if (sub.renew) {
+      renewBtn.textContent = renewLabel(sub.renew);
+      renewBtn.onclick = function () { stopEnding(); showRenew(sub.renew, "subscription"); };
+    } else {
+      renewBtn.textContent = "Renew or change plan";
+      renewBtn.onclick = function () { stopEnding(); showPaywall(endingNotice(sub)); paywallReturn = "subscription"; };
+    }
+    show("ending");
+    try { renewBtn.focus(); } catch (e) {}
+    var left = ENDING_WAIT_S;
+    var count = document.getElementById("ending-count");
+    function tick() {
+      if (left <= 0) { stopEnding(); enterSite(); return; }
+      count.textContent = "Continuing in " + left + "\u2026";
+      left -= 1;
+    }
+    tick();
+    endingTimer = setInterval(tick, 1000);
+  }
+  // Any key, tap or click on the reminder stops the countdown: they're reading it.
+  function stopEnding() {
+    if (endingTimer) { clearInterval(endingTimer); endingTimer = null; }
+    document.getElementById("ending-count").textContent = "";
+  }
+
   // Poll the payment until the callback settles it (or we give up).
   function pollPayment(id, tries) {
     if (tries > 30) { // ~90s
       document.getElementById("poll-err").textContent = "Still waiting. You can go back and check again shortly.";
-      setTimeout(showPaywall, 2500);
+      setTimeout(payAgain, 2500);
       return;
     }
     authed("/payments/" + id).then(function (r) {
@@ -1140,7 +1362,7 @@
         if (s === "SUCCEEDED") { checkAccess("subscription"); return; }
         if (s === "FAILED" || s === "CANCELLED") {
           document.getElementById("poll-err").textContent = "Payment wasn't completed.";
-          setTimeout(showPaywall, 2500);
+          setTimeout(payAgain, 2500);
           return;
         }
       }
@@ -1300,6 +1522,15 @@
   document.getElementById("terms-link").addEventListener("click", function (e) { e.preventDefault(); openTerms("plans"); });
   document.getElementById("terms-agree").addEventListener("click", function () { closeTerms(true); });
   document.getElementById("terms-back").addEventListener("click", function () { closeTerms(false); });
+  document.getElementById("renew-pay").addEventListener("click", payRenew);
+  document.getElementById("renew-change").addEventListener("click", changeRenew);
+  document.getElementById("renew-browse").addEventListener("click", gotoSite);
+  document.getElementById("renew-terms-ok").addEventListener("change", updateRenewButton);
+  document.getElementById("renew-terms-link").addEventListener("click", function (e) { e.preventDefault(); openTerms("renew"); });
+  document.getElementById("ending-continue").addEventListener("click", function () { stopEnding(); enterSite(); });
+  ["keydown", "pointerdown", "touchstart"].forEach(function (name) {
+    document.addEventListener(name, function () { if (currentView() === "ending") stopEnding(); }, true);
+  });
 
   startUp();
 })();
