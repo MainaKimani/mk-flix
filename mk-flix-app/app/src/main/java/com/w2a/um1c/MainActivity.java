@@ -1917,10 +1917,14 @@ public class MainActivity extends Activity {
 
         // --- Picture-in-picture (mkflix-pip.js, on cinejoy.pk) ---
 
-        /** Whether this phone can open the floating window now. */
+        /**
+         * Whether this phone can do picture-in-picture at all. True even when
+         * the user turned it off for the app: the button stays, and tapping
+         * it explains how to turn it back on (showPipOffNote).
+         */
         @JavascriptInterface
         public boolean pipAvailable() {
-            return isCineJoyUrl(pageUrl) && pipAllowed();
+            return isCineJoyUrl(pageUrl) && pipSupported();
         }
 
         /**
@@ -1948,8 +1952,12 @@ public class MainActivity extends Activity {
                 return;
             }
             runOnUiThread(() -> {
-                if (!MainActivity.this.enterPip()) {
-                    callPipJs("failed()");
+                if (MainActivity.this.enterPip()) {
+                    return;
+                }
+                callPipJs("failed()");
+                if (pipSupported() && !pipAllowed()) {
+                    showPipOffNote();
                 }
             });
         }
@@ -2279,6 +2287,40 @@ public class MainActivity extends Activity {
         AppOpsManager ops = (AppOpsManager) getSystemService(Context.APP_OPS_SERVICE);
         return ops == null || ops.checkOpNoThrow(AppOpsManager.OPSTR_PICTURE_IN_PICTURE,
                 Process.myUid(), getPackageName()) == AppOpsManager.MODE_ALLOWED;
+    }
+
+    /**
+     * The player's picture-in-picture button, tapped while the user has
+     * turned picture-in-picture off for the app. There's no permission to
+     * request: it's on for every app unless switched off in Settings, so
+     * say where to switch it back on. Leaving the app mid-film with it off
+     * stays quiet (the film just pauses).
+     */
+    private void showPipOffNote() {
+        if (isFinishing() || isDestroyed()) {
+            return;
+        }
+        new android.app.AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
+                .setTitle("Picture-in-picture is off")
+                .setMessage("To keep a film playing in a small window while you use other apps, "
+                        + "turn on picture-in-picture for Blendy Play in Settings.")
+                .setPositiveButton("Open Settings", (dialog, which) -> openPipSettings())
+                .setNegativeButton("Not now", null)
+                .show();
+    }
+
+    /** Blendy Play's picture-in-picture switch, or its app page where that's missing. */
+    private void openPipSettings() {
+        Uri app = Uri.parse("package:" + getPackageName());
+        try {
+            startActivity(new Intent("android.settings.PICTURE_IN_PICTURE_SETTINGS", app));
+        } catch (ActivityNotFoundException e) {
+            try {
+                startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, app));
+            } catch (ActivityNotFoundException ignored) {
+                // no settings app to open
+            }
+        }
     }
 
     private void setPipState(boolean playing, int width, int height) {

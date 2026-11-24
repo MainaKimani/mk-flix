@@ -39,8 +39,9 @@
   var N = window.MKFlixNative || {};
   var android = typeof N.enterPip === "function";
   if (android && !N.pipAvailable()) {
-    // The phone can't (Android 7, picture-in-picture turned off for the
-    // app, or a TV): leave the site as it is.
+    // The phone can't (Android 7, or no picture-in-picture at all): leave
+    // the site as it is. Turned off for the app still counts as available:
+    // the app explains how to turn it on when the button is tapped.
     window.__mkflixPip = { mode: function () {}, control: function () {}, failed: function () {} };
     return;
   }
