@@ -44,6 +44,7 @@ import android.view.animation.AccelerateDecelerateInterpolator;
 import android.webkit.CookieManager;
 import android.webkit.DownloadListener;
 import android.webkit.JavascriptInterface;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.SslErrorHandler;
 import android.webkit.WebBackForwardList;
 import android.webkit.WebResourceError;
@@ -162,7 +163,12 @@ public class MainActivity extends Activity {
     private long splashMinMs;
     private ObjectAnimator splashPulse;
     private boolean watchingForContent;
-    private final Runnable splashTimeout = this::dismissSplash;
+    private final Runnable splashTimeout = this::onSplashTimeout;
+    // Set when the WebView renderer process died (usually out of memory on a
+    // low-RAM device loading a heavy page). Static so it survives the
+    // recreate() that rebuilds the activity, where onCreate reads it to show
+    // the error screen instead of reloading the page that crashed.
+    private static boolean renderCrashRecovery;
     // At startup it's shown at least this long, so it reads as an intro
     // rather than a flicker. The hand-off splash has no minimum.
     private static final long SPLASH_MIN_MS = 3000;
@@ -179,6 +185,17 @@ public class MainActivity extends Activity {
             + "var text=[].some.call(document.querySelectorAll('h1,h2,video'),vis);"
             + "var img=[].some.call(document.images,function(i){return i.complete&&i.naturalWidth>0&&vis(i);});"
             + "return text&&img;})()";
+    // True when a cinejoy.pk page looks blank: its body has almost no text and
+    // no loaded image. A device too low on memory, or with a browser too old
+    // for the site, can load the HTML but fail to render it, leaving a white
+    // page; the splash timeout uses this to show the error screen instead of
+    // revealing the white page. A slow-but-working site shows its own loading
+    // text, so it reads as non-blank.
+    private static final String PAGE_BLANK_JS = "(function(){"
+            + "if(!/(^|\\.)cinejoy\\.pk$/.test(location.hostname))return false;"
+            + "var t=((document.body&&document.body.innerText)||'').trim().length;"
+            + "var img=[].some.call(document.images,function(i){return i.complete&&i.naturalWidth>0;});"
+            + "return t<20&&!img;})()";
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -382,6 +399,34 @@ public class MainActivity extends Activity {
             }
 
             @Override
+            public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+                // The renderer process died — almost always out of memory on a
+                // low-RAM device loading a heavy page, occasionally a crash. A
+                // dead renderer's WebView can't be reused, and returning false
+                // would let the framework kill the whole app. Drop the dead
+                // WebView and rebuild the activity; onCreate then shows the
+                // error screen (renderCrashRecovery) instead of a white page.
+                renderCrashRecovery = true;
+                try {
+                    ViewGroup parent = (ViewGroup) view.getParent();
+                    if (parent != null) {
+                        parent.removeView(view);
+                    }
+                    view.destroy();
+                } catch (Exception ignored) {
+                }
+                if (webView == view) {
+                    webView = null;
+                }
+                new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                    if (!isFinishing() && !isDestroyed()) {
+                        recreate();
+                    }
+                });
+                return true;
+            }
+
+            @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 // Hand over from the splash. The gate takes it down itself when
@@ -527,7 +572,13 @@ public class MainActivity extends Activity {
             }
         });
 
-        if (savedInstanceState != null) {
+        if (renderCrashRecovery) {
+            // Rebuilt after a renderer crash: don't restore the page that
+            // crashed — show the error screen with a device-specific message.
+            renderCrashRecovery = false;
+            errorPageFailedUrl = HOME_URL;
+            webView.loadUrl(ERROR_PAGE + "?url=" + Uri.encode(HOME_URL) + "&desc=BLENDY_RENDERER_GONE");
+        } else if (savedInstanceState != null) {
             webView.restoreState(savedInstanceState);
         } else {
             webView.loadUrl(ACCOUNT_PAGE);
@@ -698,6 +749,30 @@ public class MainActivity extends Activity {
                         parent.removeView(leaving);
                     }
                 });
+    }
+
+    /**
+     * The splash has been up the maximum time. Normally we take it down so a
+     * slow-but-working site shows its own loading UI. But if we're on
+     * cinejoy.pk and it still hasn't drawn anything (PAGE_BLANK_JS), the page
+     * is blank — show the error screen instead of revealing a white page. The
+     * error page's own onPageFinished then takes the splash down, so there's
+     * no flash of white in between.
+     */
+    private void onSplashTimeout() {
+        if (splash == null || webView == null || !isCineJoyUrl(pageUrl)) {
+            dismissSplash();
+            return;
+        }
+        final String blankUrl = pageUrl;
+        webView.evaluateJavascript(PAGE_BLANK_JS, value -> {
+            if ("true".equals(value) && webView != null) {
+                errorPageFailedUrl = blankUrl;
+                webView.loadUrl(ERROR_PAGE + "?url=" + Uri.encode(blankUrl) + "&desc=BLENDY_BLANK");
+            } else {
+                dismissSplash();
+            }
+        });
     }
 
     /**

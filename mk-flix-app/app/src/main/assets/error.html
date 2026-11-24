@@ -107,6 +107,10 @@
     } else if (connection) {
       message.textContent = "The connection to cinejoy.pk failed or was blocked.";
       hint.textContent = 'Check your internet connection, or try another network.';
+    } else if (/BLENDY_RENDERER_GONE|BLENDY_BLANK/.test(name)) {
+      title.textContent = 'This device is struggling to load the player';
+      message.textContent = 'The page didn’t finish loading. This usually happens on devices that are low on memory, or whose system browser is out of date.';
+      hint.textContent = 'Tap Retry. If it keeps happening, update “Android System WebView” in your device’s app store, then reopen Blendy Play.';
     }
 
     if (desc) document.getElementById('detail').textContent = desc + (code ? ' (' + code + ')' : '');
