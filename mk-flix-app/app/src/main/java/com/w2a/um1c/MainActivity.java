@@ -147,6 +147,9 @@ public class MainActivity extends Activity {
     private boolean pipPlaying;
     private int pipVideoWidth = 16;
     private int pipVideoHeight = 9;
+    // Where the picture is on the page, in CSS pixels (x, y, width, height):
+    // Android's hint for zooming it into the floating window. Empty when unknown.
+    private final int[] pipPictureCss = new int[4];
     private android.content.BroadcastReceiver pipReceiver;
     private static final String ACTION_PIP_CONTROL = "com.mainakimani.blendyplay.PIP_CONTROL";
     private final Subscription subscription = new Subscription();
@@ -1920,13 +1923,22 @@ public class MainActivity extends Activity {
             return isCineJoyUrl(pageUrl) && pipAllowed();
         }
 
-        /** The video started or stopped playing, or changed size. */
+        /**
+         * The video started or stopped playing, changed size, or moved. x, y,
+         * w and h are where its picture is on the page, in CSS pixels.
+         */
         @JavascriptInterface
-        public void pipState(boolean playing, int width, int height) {
+        public void pipState(boolean playing, int width, int height, int x, int y, int w, int h) {
             if (!isCineJoyUrl(pageUrl)) {
                 return;
             }
-            runOnUiThread(() -> setPipState(playing, width, height));
+            runOnUiThread(() -> {
+                pipPictureCss[0] = x;
+                pipPictureCss[1] = y;
+                pipPictureCss[2] = w;
+                pipPictureCss[3] = h;
+                setPipState(playing, width, height);
+            });
         }
 
         /** The player's picture-in-picture button. */
@@ -2311,6 +2323,10 @@ public class MainActivity extends Activity {
                 : pipAction(android.R.drawable.ic_media_play, "Play", "toggle", 2));
         actions.add(pipAction(android.R.drawable.ic_media_ff, "Forward 10 seconds", "forward", 3));
         b.setActions(actions);
+        android.graphics.Rect hint = pipSourceRect();
+        if (hint != null) {
+            b.setSourceRectHint(hint);
+        }
         if (Build.VERSION.SDK_INT >= 31) {
             // Android 12+: leaving the app while a film plays opens the
             // window by itself, with a smooth animation. Earlier versions go
@@ -2319,6 +2335,34 @@ public class MainActivity extends Activity {
             b.setSeamlessResizeEnabled(false);
         }
         return b.build();
+    }
+
+    /**
+     * Where the film's picture is, in the window's pixels, from what
+     * mkflix-pip.js reported. With it, Android zooms the picture itself into
+     * the floating window; without it, Android covers the app with its icon
+     * on a plain card (white on a phone in light mode) while it shrinks.
+     * Null when unknown, and in the WebView's own fullscreen, where the page
+     * isn't what's on screen.
+     */
+    private android.graphics.Rect pipSourceRect() {
+        if (webView == null || customView != null || pipPictureCss[2] <= 0 || pipPictureCss[3] <= 0) {
+            return null;
+        }
+        // A CSS pixel is one dp: phones get the page at the device's width
+        // (the TV's 1280px page never gets here).
+        float dp = getResources().getDisplayMetrics().density;
+        int[] at = new int[2];
+        webView.getLocationInWindow(at);
+        android.graphics.Rect r = new android.graphics.Rect(
+                at[0] + Math.round(pipPictureCss[0] * dp),
+                at[1] + Math.round(pipPictureCss[1] * dp),
+                at[0] + Math.round((pipPictureCss[0] + pipPictureCss[2]) * dp),
+                at[1] + Math.round((pipPictureCss[1] + pipPictureCss[3]) * dp));
+        if (!r.intersect(at[0], at[1], at[0] + webView.getWidth(), at[1] + webView.getHeight())) {
+            return null;
+        }
+        return r;
     }
 
     private RemoteAction pipAction(int icon, String title, String command, int requestCode) {

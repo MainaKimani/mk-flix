@@ -140,6 +140,19 @@
   }
 
   // --- Android: tell the app what's playing --------------------------------------
+  // Where the picture itself is, in CSS pixels: the <video> fills the player
+  // and letterboxes the film inside it (object-fit: contain). The app hands
+  // this to Android, which then zooms the film into the floating window
+  // instead of covering the app with its icon on a plain card.
+  function pictureRect(v) {
+    var r = v.getBoundingClientRect();
+    if (!r.width || !r.height) return [0, 0, 0, 0];
+    var s = v.videoWidth && v.videoHeight ? Math.min(r.width / v.videoWidth, r.height / v.videoHeight) : 0;
+    var w = s ? v.videoWidth * s : r.width;
+    var h = s ? v.videoHeight * s : r.height;
+    return [r.left + (r.width - w) / 2, r.top + (r.height - h) / 2, w, h].map(Math.round);
+  }
+
   var lastState = "";
   function report() {
     if (!android) return;
@@ -147,11 +160,14 @@
     var playing = !!(onWatch() && v && !v.paused && !v.ended && !window.__mkflixHold);
     var w = (v && v.videoWidth) || 16;
     var h = (v && v.videoHeight) || 9;
-    var state = playing + " " + w + " " + h;
+    var rect = v ? pictureRect(v) : [0, 0, 0, 0];
+    var state = [playing, w, h].concat(rect).join(" ");
     if (state === lastState) return;
     lastState = state;
-    N.pipState(playing, w, h);
+    N.pipState(playing, w, h, rect[0], rect[1], rect[2], rect[3]);
   }
+  // Rotating the phone moves the picture.
+  window.addEventListener("resize", report);
   ["play", "playing", "pause", "ended", "emptied", "loadedmetadata"].forEach(function (name) {
     window.addEventListener(name, function (e) {
       if (e.target && e.target.tagName === "VIDEO") report();
