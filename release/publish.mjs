@@ -46,12 +46,18 @@ const PLATFORM_TEXT = {
   android: {
     label: 'Android phones and TVs',
     requires: 'Android 7.0 or later, including Android TV and Google TV',
-    howto: 'Open the file and allow installing from this source when asked. On a TV, use the Downloader app.',
+    howto: 'Open the file and allow installing from this source when asked. Google Play Protect may warn '
+      + 'that the app is unknown or potentially harmful: it says that about apps installed from a website '
+      + 'instead of the Play Store, which Blendy Play isn\'t on yet. Tap More details, then Install anyway. '
+      + 'If your browser warns about the download, choose Download anyway. On a TV, use the Downloader app.',
   },
   windows: {
     label: 'Windows',
     requires: 'Windows 10 or 11, 64-bit',
-    howto: 'Run the installer. If Windows warns you, choose More info, then Run anyway.',
+    howto: 'Run the installer. Windows may say \'Windows protected your PC\' - It says that about new '
+      + 'programs whose publisher it doesn\'t know yet, because the installer isn\'t signed with a paid '
+      + 'code-signing certificate. Choose More info, then Run anyway. If your browser warns about the '
+      + 'download, choose Keep (in Edge: … → Keep → Show more → Keep anyway).',
   },
   linux: {
     label: 'Ubuntu and Debian',
