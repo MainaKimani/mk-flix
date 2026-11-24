@@ -116,6 +116,9 @@ const noticeJs = readOptional('mkflix-notice.js');
 const playerJs = readOptional('mkflix-player.js');
 // One sign-in for Blendy Play and CineJoy (see "CineJoy account" below).
 const cinejoyJs = readOptional('mkflix-cinejoy.js');
+// Picture-in-picture: makes sure the player has its button, and opens the
+// floating video when the window is minimized mid-film (see createWindow).
+const pipJs = readOptional('mkflix-pip.js');
 ipcMain.on('mkflix:logo-css', (event) => {
   event.returnValue = logoCss;
 });
@@ -467,6 +470,7 @@ app.on('web-contents-created', (_event, contents) => {
       if (lockJs) contents.executeJavaScript(lockJs).catch(() => {});
       if (noticeJs) contents.executeJavaScript(noticeJs).catch(() => {});
       if (playerJs) contents.executeJavaScript(playerJs).catch(() => {});
+      if (pipJs) contents.executeJavaScript(pipJs).catch(() => {});
       if (cinejoyJs) contents.executeJavaScript(cinejoyJs).catch(() => {});
     }
   });
@@ -645,6 +649,19 @@ function createWindow() {
 
   showSplash(win, SPLASH_MIN_MS);
   watchSplashHandOff(win);
+
+  // Picture-in-picture: minimizing the window mid-film opens the video in
+  // Chromium's floating window, and bringing the window back closes it
+  // again (only when minimizing opened it). The page can open that window
+  // only with a user gesture, hence `true`: minimizing is the user's act.
+  // mkflix-pip.js checks that this is a playing /watch/ page.
+  const pip = (call) => {
+    if (!isCineJoy(hostOf(win.webContents.getURL()))) return;
+    win.webContents.executeJavaScript(`window.__mkflixPip && window.__mkflixPip.${call}()`, true)
+      .catch(() => {});
+  };
+  win.on('minimize', () => pip('auto'));
+  win.on('restore', () => pip('restored'));
   // Start on the account gate, not the site. It checks for an active MK-Flix
   // subscription against the backend and sends the window to cinejoy.pk itself
   // (guardNavigation allows that) once the user is signed in and subscribed.

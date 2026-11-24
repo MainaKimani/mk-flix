@@ -12,7 +12,7 @@
 //    touches is never interrupted, because nothing played on by itself.
 // 2. Finished. At the end of a film or of a series' last episode, a card
 //    counts down 10 seconds, then goes to the home page; "Go home now" goes
-//    at once.
+//    at once. In picture-in-picture the card waits instead of counting down.
 // 3. Screen on. Tells the Android app while a film is playing, so the phone's
 //    screen doesn't dim and turn off mid-film.
 //
@@ -237,6 +237,16 @@
   }, true);
 
   function finished() {
+    // In picture-in-picture (window.__mkflixInPip, set by mkflix-pip.js)
+    // there's no countdown: on Android the floating window would show the
+    // home page, and it's not clear the user is looking. The card waits for
+    // them instead.
+    if (window.__mkflixInPip) {
+      showCard("ended", "Finished", "Taking you back to browse some more when you're ready.", [
+        { label: "Go home now", main: true, run: function () { removeCard(); goHome(); } }
+      ]);
+      return;
+    }
     var left = COUNTDOWN_S;
     var text = showCard("ended", "Finished", "", [
       { label: "Go home now", main: true, run: function () { removeCard(); goHome(); } }

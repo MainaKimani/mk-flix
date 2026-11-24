@@ -6,7 +6,15 @@ import android.animation.PropertyValuesHolder;
 import android.animation.ValueAnimator;
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.AppOpsManager;
 import android.app.DownloadManager;
+import android.app.PendingIntent;
+import android.app.PictureInPictureParams;
+import android.app.RemoteAction;
+import android.content.IntentFilter;
+import android.graphics.drawable.Icon;
+import android.os.Process;
+import android.util.Rational;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
@@ -130,6 +138,17 @@ public class MainActivity extends Activity {
     // mkflix-cinejoy.js: one sign-in for Blendy Play and CineJoy (see the
     // CineJoy account section).
     private String cinejoyJs = "";
+    // Picture-in-picture on phones (assets/mkflix-pip.js; see the
+    // "Picture-in-picture" section). Empty where the phone can't do it, and
+    // on a TV.
+    private String pipJs = "";
+    // What mkflix-pip.js last reported: a video playing on a /watch/ page,
+    // and its size for the floating window's shape.
+    private boolean pipPlaying;
+    private int pipVideoWidth = 16;
+    private int pipVideoHeight = 9;
+    private android.content.BroadcastReceiver pipReceiver;
+    private static final String ACTION_PIP_CONTROL = "com.mainakimani.blendyplay.PIP_CONTROL";
     private final Subscription subscription = new Subscription();
 
     // In-app updates (see AppUpdater). pageUrl lets the bridge serve update
@@ -280,6 +299,10 @@ public class MainActivity extends Activity {
             webView.setFocusable(true);
             webView.requestFocus();
         }
+        if (pipSupported()) {
+            pipJs = readAsset("mkflix-pip.js");
+            registerPipReceiver();
+        }
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -319,11 +342,13 @@ public class MainActivity extends Activity {
                 if (isWebUrl(url)) {
                     loadingUrl = url;
                 }
-                // A new page: nothing plays until its mkflix-player.js says so.
+                // A new page: nothing plays until its mkflix-player.js and
+                // mkflix-pip.js say so.
                 if (filmPlaying) {
                     filmPlaying = false;
                     updateKeepScreenOn();
                 }
+                setPipState(false, pipVideoWidth, pipVideoHeight);
             }
 
             @Override
@@ -354,6 +379,11 @@ public class MainActivity extends Activity {
                 if (!cinejoyJs.isEmpty() && isCineJoyUrl(url)) {
                     view.evaluateJavascript(cinejoyJs, null);
                 }
+                // Early, so the player finds the picture-in-picture API in
+                // place when it builds its buttons.
+                if (!pipJs.isEmpty() && isCineJoyUrl(url)) {
+                    view.evaluateJavascript(pipJs, null);
+                }
             }
 
             @Override
@@ -361,6 +391,9 @@ public class MainActivity extends Activity {
                 super.doUpdateVisitedHistory(view, url, isReload);
                 // Also called for the site's in-page navigation (history.pushState).
                 boolean watching = isWatchUrl(url);
+                if (!watching) {
+                    setPipState(false, pipVideoWidth, pipVideoHeight);
+                }
                 // Playback gate: a /watch/ page reached without an active
                 // subscription is sent to the paywall. The enforcer script
                 // normally catches this first; this backs it up for full page
@@ -482,6 +515,11 @@ public class MainActivity extends Activity {
                         }
                         if (!playerJs.isEmpty()) {
                             view.evaluateJavascript(playerJs, null);
+                        }
+                        // Again in case commit-visible was skipped; it guards
+                        // against running twice.
+                        if (!pipJs.isEmpty()) {
+                            view.evaluateJavascript(pipJs, null);
                         }
                         // Again in case commit-visible was skipped; it guards
                         // against running twice.
@@ -1874,6 +1912,36 @@ public class MainActivity extends Activity {
             });
         }
 
+        // --- Picture-in-picture (mkflix-pip.js, on cinejoy.pk) ---
+
+        /** Whether this phone can open the floating window now. */
+        @JavascriptInterface
+        public boolean pipAvailable() {
+            return isCineJoyUrl(pageUrl) && pipAllowed();
+        }
+
+        /** The video started or stopped playing, or changed size. */
+        @JavascriptInterface
+        public void pipState(boolean playing, int width, int height) {
+            if (!isCineJoyUrl(pageUrl)) {
+                return;
+            }
+            runOnUiThread(() -> setPipState(playing, width, height));
+        }
+
+        /** The player's picture-in-picture button. */
+        @JavascriptInterface
+        public void enterPip() {
+            if (!isCineJoyUrl(pageUrl)) {
+                return;
+            }
+            runOnUiThread(() -> {
+                if (!MainActivity.this.enterPip()) {
+                    callPipJs("failed()");
+                }
+            });
+        }
+
         @JavascriptInterface
         public String getApiBase() {
             return apiBaseConfig;
@@ -2175,6 +2243,147 @@ public class MainActivity extends Activity {
         }
     }
 
+    // --- Picture-in-picture --------------------------------------------------
+    //
+    // On phones (Android 8+), a film can shrink into Android's floating
+    // window: with the player's own picture-in-picture button, or by leaving
+    // the app while it plays (Home, or the recent-apps gesture). The floating
+    // window is this whole activity made small; mkflix-pip.js hides the
+    // player's bars in it, and Android draws play/pause and 10-second skip
+    // buttons on it, which come back here as ACTION_PIP_CONTROL broadcasts.
+    // Closing the window stops playback (onStop). Never on a TV.
+
+    private boolean pipSupported() {
+        return Build.VERSION.SDK_INT >= 26 && !isTv
+                && getPackageManager().hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE);
+    }
+
+    /** Supported, and not turned off for this app in Android's settings. */
+    @SuppressWarnings("deprecation")
+    private boolean pipAllowed() {
+        if (!pipSupported()) {
+            return false;
+        }
+        AppOpsManager ops = (AppOpsManager) getSystemService(Context.APP_OPS_SERVICE);
+        return ops == null || ops.checkOpNoThrow(AppOpsManager.OPSTR_PICTURE_IN_PICTURE,
+                Process.myUid(), getPackageName()) == AppOpsManager.MODE_ALLOWED;
+    }
+
+    private void setPipState(boolean playing, int width, int height) {
+        boolean nowPlaying = playing && webView != null && isWatchUrl(webView.getUrl());
+        if (width > 0 && height > 0) {
+            pipVideoWidth = width;
+            pipVideoHeight = height;
+        }
+        pipPlaying = nowPlaying;
+        updatePipParams();
+    }
+
+    /** Opens the floating window; false when it can't open now. */
+    private boolean enterPip() {
+        if (!pipAllowed() || webView == null || splash != null || isInPictureInPictureMode()
+                || !isWatchUrl(webView.getUrl())) {
+            return false;
+        }
+        try {
+            return enterPictureInPictureMode(pipParams());
+        } catch (RuntimeException e) {
+            // IllegalStateException when the phone refuses it after all.
+            return false;
+        }
+    }
+
+    private PictureInPictureParams pipParams() {
+        PictureInPictureParams.Builder b = new PictureInPictureParams.Builder();
+        // Android refuses shapes wider than 2.39:1 or taller than 1:2.39.
+        float ratio = pipVideoWidth / (float) pipVideoHeight;
+        if (ratio > 2.39f) {
+            b.setAspectRatio(new Rational(239, 100));
+        } else if (ratio < 1 / 2.39f) {
+            b.setAspectRatio(new Rational(100, 239));
+        } else {
+            b.setAspectRatio(new Rational(pipVideoWidth, pipVideoHeight));
+        }
+        java.util.List<RemoteAction> actions = new java.util.ArrayList<>();
+        actions.add(pipAction(android.R.drawable.ic_media_rew, "Back 10 seconds", "back", 1));
+        actions.add(pipPlaying
+                ? pipAction(android.R.drawable.ic_media_pause, "Pause", "toggle", 2)
+                : pipAction(android.R.drawable.ic_media_play, "Play", "toggle", 2));
+        actions.add(pipAction(android.R.drawable.ic_media_ff, "Forward 10 seconds", "forward", 3));
+        b.setActions(actions);
+        if (Build.VERSION.SDK_INT >= 31) {
+            // Android 12+: leaving the app while a film plays opens the
+            // window by itself, with a smooth animation. Earlier versions go
+            // through onUserLeaveHint instead.
+            b.setAutoEnterEnabled(pipPlaying && splash == null);
+            b.setSeamlessResizeEnabled(false);
+        }
+        return b.build();
+    }
+
+    private RemoteAction pipAction(int icon, String title, String command, int requestCode) {
+        Intent intent = new Intent(ACTION_PIP_CONTROL)
+                .setPackage(getPackageName())
+                .putExtra("command", command);
+        PendingIntent pending = PendingIntent.getBroadcast(this, requestCode, intent,
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+        return new RemoteAction(Icon.createWithResource("android", icon), title, title, pending);
+    }
+
+    /** Keeps Android's copy of the window's shape, buttons and auto-open current. */
+    private void updatePipParams() {
+        if (!pipAllowed()) {
+            return;
+        }
+        try {
+            setPictureInPictureParams(pipParams());
+        } catch (RuntimeException ignored) {
+            // e.g. turned off for the app while it was running
+        }
+    }
+
+    private void registerPipReceiver() {
+        pipReceiver = new android.content.BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                String command = intent.getStringExtra("command");
+                // Only these three reach the page.
+                if ("toggle".equals(command) || "back".equals(command) || "forward".equals(command)) {
+                    callPipJs("control('" + command + "')");
+                }
+            }
+        };
+        IntentFilter filter = new IntentFilter(ACTION_PIP_CONTROL);
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(pipReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(pipReceiver, filter);
+        }
+    }
+
+    /** Calls window.__mkflixPip.<call> on the page, when it's there. */
+    private void callPipJs(String call) {
+        if (webView != null && isCineJoyUrl(webView.getUrl())) {
+            webView.evaluateJavascript("window.__mkflixPip&&window.__mkflixPip." + call, null);
+        }
+    }
+
+    @Override
+    protected void onUserLeaveHint() {
+        super.onUserLeaveHint();
+        // Android 8–11: leaving the app mid-film. 12+ does this itself
+        // (setAutoEnterEnabled).
+        if (Build.VERSION.SDK_INT >= 26 && Build.VERSION.SDK_INT < 31 && pipPlaying) {
+            enterPip();
+        }
+    }
+
+    @Override
+    public void onPictureInPictureModeChanged(boolean inPip, Configuration newConfig) {
+        super.onPictureInPictureModeChanged(inPip, newConfig);
+        callPipJs("mode(" + inPip + ")");
+    }
+
     @Override
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
@@ -2186,8 +2395,24 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         super.onPause();
+        // In the floating window the activity is paused but still showing,
+        // and the film should carry on; onStop pauses it once it's closed.
+        if (webView != null && !isInPictureInPictureMode()) {
+            webView.onPause();
+        }
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
         if (webView != null) {
             webView.onPause();
+            // Nobody can see the film any more: the floating window was
+            // closed, or the app went to the background without one.
+            if (isCineJoyUrl(webView.getUrl())) {
+                webView.evaluateJavascript(
+                        "(function(){var v=document.querySelector('video');if(v&&!v.paused)v.pause();})()", null);
+            }
         }
     }
 
@@ -2204,6 +2429,13 @@ public class MainActivity extends Activity {
         if (installReceiver != null) {
             try {
                 unregisterReceiver(installReceiver);
+            } catch (IllegalArgumentException ignored) {
+                // not registered
+            }
+        }
+        if (pipReceiver != null) {
+            try {
+                unregisterReceiver(pipReceiver);
             } catch (IllegalArgumentException ignored) {
                 // not registered
             }
