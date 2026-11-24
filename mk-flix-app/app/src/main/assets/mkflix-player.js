@@ -13,6 +13,8 @@
 // 2. Finished. At the end of a film or of a series' last episode, a card
 //    counts down 10 seconds, then goes to the home page; "Go home now" goes
 //    at once.
+// 3. Screen on. Tells the Android app while a film is playing, so the phone's
+//    screen doesn't dim and turn off mid-film.
 //
 // Every exit goes to the home page, not back through history or to the
 // title's page: the site adds a history entry each time it moves to the next
@@ -261,4 +263,28 @@
       if (cardKind === "ended" && e.target && e.target.tagName === "VIDEO") removeCard();
     }, true);
   });
+
+  // --- 3. Screen on while a film plays ----------------------------------------
+  // The Android app keeps the screen from dimming and turning off while this
+  // says a film is playing (MKFlixNative.setPlaying). The desktop app has no
+  // such call and doesn't need it: Chromium keeps the screen awake for a
+  // playing video itself.
+  var lastPlaying = null;
+  function reportPlaying() {
+    var N = window.MKFlixNative;
+    if (!N || typeof N.setPlaying !== "function") return;
+    var v = video();
+    var playing = !!(v && !v.paused && !v.ended && watchInfo(location.pathname));
+    if (playing === lastPlaying) return;
+    lastPlaying = playing;
+    N.setPlaying(playing);
+  }
+  ["play", "playing", "pause", "ended", "emptied"].forEach(function (name) {
+    window.addEventListener(name, function (e) {
+      if (e.target && e.target.tagName === "VIDEO") reportPlaying();
+    }, true);
+  });
+  // Leaving the player with pushState fires no media event.
+  setInterval(reportPlaying, 1000);
+  reportPlaying();
 })();

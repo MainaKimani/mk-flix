@@ -148,6 +148,12 @@ public class MainActivity extends Activity {
     private boolean isTv;
     private String tvJs = "";
     private TvPointer pointer;
+
+    // Keeping the screen on (updateKeepScreenOn): while mkflix-player.js says
+    // a film is playing, on any device, and on a TV for as long as a video
+    // page is open.
+    private boolean filmPlaying;
+    private boolean tvWatching;
     // Banner that teaches pointer mode and confirms it turning on and off.
     private TvHint hint;
 
@@ -313,6 +319,11 @@ public class MainActivity extends Activity {
                 if (isWebUrl(url)) {
                     loadingUrl = url;
                 }
+                // A new page: nothing plays until its mkflix-player.js says so.
+                if (filmPlaying) {
+                    filmPlaying = false;
+                    updateKeepScreenOn();
+                }
             }
 
             @Override
@@ -360,13 +371,11 @@ public class MainActivity extends Activity {
                 }
                 // On a TV, keep the screen on while on a video page, so the
                 // screensaver doesn't start mid-film.
-                if (isTv) {
-                    if (watching) {
-                        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-                    } else {
-                        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-                    }
+                tvWatching = isTv && watching;
+                if (!watching) {
+                    filmPlaying = false;
                 }
+                updateKeepScreenOn();
             }
 
             @Override
@@ -897,6 +906,22 @@ public class MainActivity extends Activity {
         }
         String path = Uri.parse(url).getPath();
         return path != null && path.startsWith("/watch/");
+    }
+
+    /**
+     * Keeps the screen from dimming and turning off while a film plays. The
+     * WebView doesn't do this itself for cinejoy's player, so on phones the
+     * screen went dark mid-film after the usual timeout unless the user
+     * touched it. Paused, or away from the player, the usual timeout applies
+     * again. A TV keeps it on for as long as a video page is open, so its
+     * screensaver doesn't start over a paused film either.
+     */
+    private void updateKeepScreenOn() {
+        if (filmPlaying || tvWatching) {
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        } else {
+            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        }
     }
 
     /** Send the WebView back to the account gate, which shows the paywall. */
@@ -1822,6 +1847,18 @@ public class MainActivity extends Activity {
                 if (hint != null && (pointer == null || !pointer.isOn())) {
                     hint.onStuck(page);
                 }
+            });
+        }
+
+        /** mkflix-player.js: a film started or stopped playing. */
+        @JavascriptInterface
+        public void setPlaying(boolean playing) {
+            if (!isCineJoyUrl(pageUrl)) {
+                return;
+            }
+            runOnUiThread(() -> {
+                filmPlaying = playing;
+                updateKeepScreenOn();
             });
         }
 
