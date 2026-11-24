@@ -47,7 +47,97 @@ or keyed in on CineJoy so the gate saves it, and clears CineJoy's session when
 Blendy Play signs out. Registering needs CineJoy's Turnstile captcha, so the
 app never creates accounts by itself.
 
-## Latest sessions — 2026-11-15 and 2026-11-16
+## Latest session — 2026-11-24
+
+- **1.7.2 is built but not deployed.** It is a **required** update
+  (manifest minimum 1.7.2). Besides renewal reminders, one-tap renew and
+  the KES 29 daily pass (plan: `docs/renewals-and-daily-pass-plan.md`; the
+  1.7.1 referrals are in `docs/referrals-plan.md`), it now also carries
+  everything below, because nothing had been released yet. Everything to
+  upload, with the step-by-step guide `DEPLOY-1.7.2.md`, is in
+  `~/Desktop/blendy-play-deploy/1.7.2/` on this machine. `downloads/` there
+  is the final set, built from `mk-flix` `main` at `44a1ab2`. The
+  `downloads-superseded-*` folders beside it are earlier builds, kept only
+  in case.
+- **White page on low-memory phones** (`c43eca1`, made in a Claude desktop
+  session): when the WebView's renderer process dies (usually out of
+  memory), the app rebuilds the activity and shows `error.html`
+  (`BLENDY_RENDERER_GONE`) instead of a white page or being killed. When
+  the splash times out on a cinejoy.pk page that is still blank, it shows
+  the error page (`BLENDY_BLANK`) instead of revealing it. Both say to tap
+  Retry and update Android System WebView.
+- **Chromecast: investigated and dropped.** cinejoy's stream is plain HLS
+  (fMP4, H.264 + AAC, no DRM, no tokens) from `lightspeed.st`, with
+  segments named `.png`. But the host answers `404 "Removed"` to any
+  request that doesn't come from cinejoy.pk's page, so a Chromecast can't
+  fetch it. The only workaround would be a phone relay pretending to be
+  cinejoy.pk, which gets around their hotlink protection; we chose not to.
+- **Picture-in-picture** on Android phones and desktop, not TV (`b17bd8b`,
+  `a93162e`, `44a1ab2`). See "Playback: picture-in-picture and screen on".
+- **Screen stays on while a film plays** on every Android device (`76d5d97`).
+  Phones used to dim and turn off mid-film (reported on a Sony).
+- **Black video placeholder** (`fcd8c02`): the WebView's grey play icon
+  before a film's first frame is now black.
+- **The office network breaks some films.** The office firewall (Untangle,
+  `gateway.office.tangazoletu.com`) intercepts HTTPS to some of cinejoy's
+  video servers (seen: `nebula.bright67.online`). The browser rejects the
+  firewall's certificate and the player spins at 0:00 forever. Films from
+  `lightspeed.st` play. A film that won't start at the office isn't
+  necessarily a bug: try mobile data.
+
+## Playback: picture-in-picture and screen on
+
+- **How it starts:** cinejoy's player already has a "Picture in Picture"
+  button that calls the browser's picture-in-picture API. Leaving the app
+  mid-film starts it too: Home or the recent-apps gesture on Android,
+  minimizing on desktop.
+- **Desktop:** Electron supports that API, so the site's button works as
+  it is. `main.js` calls `__mkflixPip.auto()` on `minimize`, run with a user
+  gesture (`executeJavaScript(…, true)`) because the page can't open the
+  window without one, and `restored()` on `restore`, which closes the
+  window only if minimizing opened it.
+- **Android:** the WebView has no such API. `mkflix-pip.js` (shared,
+  injected on cinejoy.pk except on TVs) provides `requestPictureInPicture`,
+  `pictureInPictureEnabled` and `pictureInPictureElement`, and hands the
+  request to the app (`MKFlixNative.enterPip`). The app then uses
+  Android's own picture-in-picture (Android 8+;
+  `android:supportsPictureInPicture`, and `smallestScreenSize` in
+  `configChanges` so shrinking doesn't reload the page).
+  - **Automatic:** Android 12+ enters by itself (`setAutoEnterEnabled`,
+    kept current from `MKFlixNative.pipState`); Android 8–11 enter in
+    `onUserLeaveHint`.
+  - **Window buttons:** back 10 s, play/pause and forward 10 s, as
+    `RemoteAction`s that come back as `ACTION_PIP_CONTROL` broadcasts and
+    call `__mkflixPip.control()`.
+  - **In the window** (class `mkflix-pip` on `<html>`): everything on
+    `.player-root` except the `<video>` is hidden, including subtitles.
+  - **The transition:** the app passes where the picture sits on screen as
+    the source rectangle hint, so Android zooms the film into the window.
+    Without it, Android shows the app icon on a white card.
+  - **Closing:** closing the window pauses the film (`onStop`), as does
+    leaving the app without a window. `onPause` skips `webView.onPause()`
+    while in the window, or the film would freeze.
+  - **Turned off for the app** (Settings → Apps → Special app access →
+    Picture-in-picture): there is no permission to request, as it's on by
+    default. Tapping the button then shows a note whose Open Settings goes
+    straight to Blendy Play's switch. Leaving mid-film just pauses.
+  - **"Finished" card:** in picture-in-picture it waits instead of counting
+    down to the home page (`mkflix-player.js`, `window.__mkflixInPip`).
+- **Screen on:** `mkflix-player.js` calls `MKFlixNative.setPlaying` when a
+  film starts or stops, and the app sets `FLAG_KEEP_SCREEN_ON` while one
+  plays (`updateKeepScreenOn`). TVs also keep it on for as long as a
+  `/watch/` page is open. Desktop needs nothing: Chromium keeps the screen
+  awake for a playing video.
+- **Depends on cinejoy's player markup** (checked November 2026):
+  `div.player-root` fills the window; its buttons have aria-labels
+  ("Picture in Picture", "Settings", "Fullscreen"); subtitles are
+  `.lp-subtitle`. If the site's button ever goes missing,
+  `mkflix-pip.js` adds a matching one before "Settings".
+- **Tested** on the Android 17 emulator (Pixel 7) and Electron 45's API.
+  **Not yet tested:** real phones (including pinch-resizing the window),
+  Android 8–11, and the desktop app with a real film.
+
+## Sessions — 2026-11-15 and 2026-11-16
 
 - **Live with real customers.** M-Pesa runs on Safaricom's live Daraja API
   and pays into a **Buy Goods till** (`mk-flix-be` `d335da2`): setting
@@ -237,6 +327,14 @@ blendy-play commits:
 - `74de4d8` the portal: product page, sign-in, account area, admin dashboard
 
 mk-flix commits:
+- `44a1ab2` picture-in-picture: note with Open Settings when it's turned off for the app
+- `a93162e` picture-in-picture: the film zooms into the window (source rectangle hint), not a white card
+- `b17bd8b` picture-in-picture on Android phones and desktop
+- `fcd8c02` black video placeholder instead of the grey play icon
+- `76d5d97` screen stays on while a film plays (Android)
+- `c43eca1` error page instead of a white page on low-memory phones
+- `a197064` release 1.7.2 (rebuilt from `44a1ab2` without a version change)
+- 1.7.0 to 1.7.2 (CineJoy server key, Help, referrals, renewals, daily pass): see `git log`
 - `ccf6ff6` release 1.6.0
 - `38d5f9d` apps register the device at sign-in; device limit and remote sign-out handled
 - `f082a2e` Android: one subscription check at a time, with back-off
@@ -338,12 +436,15 @@ and `mk-flix-desktop/` — keep them byte-identical):
 - `mkflix-menu.js` — adds "My Subscription" to cinejoy's **Settings submenu** and the **floating bottom bar** — never the main nav.
 - `mkflix-lock.js` — golden padlock on each poster while unsubscribed.
 - `mkflix-footer.js`, `mkflix-logo.css` — branding (footer replacement, logo).
+- `mkflix-player.js` — "Still watching?" after 90 idle minutes of autoplay, the "Finished" card, and telling the Android app while a film plays (screen on).
+- `mkflix-pip.js` — picture-in-picture (see "Playback: picture-in-picture and screen on"). Not loaded on Android TV.
 
 **Native bridge `window.MKFlixNative`** — the authoritative subscription check, so
 a cinejoy page/ad can't fake a subscription:
 - Android: `MkFlixBridge` in `MainActivity.java` (HTTP to `/me/subscription` on a bg thread, cached in `SharedPreferences`).
 - Desktop: `preload.js` exposes it; `main.js` holds the session (memory only) and does the HTTP check.
 - Methods: `getApiBase()`, `saveSession(apiBase, access, refresh)`, `clearSession()`, `refreshSubscription()`, `isSubscribed()`, `openPaywall()`, `openSubscription()`.
+- Android only, for playback: `setPlaying(playing)` (screen on), `pipAvailable()`, `pipState(playing, width, height, x, y, w, h)`, `enterPip()`.
 
 **Backend `mk-flix-be`** (Django 5.2 + DRF + simplejwt):
 - `accounts` — email-login `CustomUser` (`email_verified_at`); `EmailVerificationCode` + `accounts/verification.py` for the 4-digit code; `PasswordResetToken` + `accounts/password_reset.py` for forgot password; passwords need 6+ characters, not all numbers, not common, not like the email; CineJoy number **encrypted at rest** (Fernet, `FIELD_ENCRYPTION_KEY`); self-service profile/password/delete (`accounts/services.py` erases the person but keeps payments as anonymous records).
@@ -556,6 +657,8 @@ backend). Step-by-step guide: `mk-flix-be/DEPLOY.md`.
   removal not confirmed).
 - **In the field:** 1.6.0 apps on Android and Linux have checked in, and 1.5.1
   apps got 426 Update required, so the update path works.
+- **Current:** 1.7.1 is live (as of 2026-11-24). 1.7.2 is built, as a
+  required update, and waiting to be deployed (see "Latest session").
 
 ## The rename
 
@@ -591,12 +694,30 @@ With `EMAIL_BACKEND` unset, emails print to the runserver console.
 - Android: `mk-flix-app/app/src/main/assets/mkflix-config.json` (`apiBase`). Emulator: `http://10.0.2.2:8000/api`, or `http://localhost:8000/api` **with `adb reverse tcp:8000 tcp:8000`**.
 - **Both `mkflix-config.json` files ship empty and must stay empty in commits.** A local testing value may be on disk uncommitted.
 
-**Building the Android APK** — on this machine build-tools 34's `d8` crashes on the installed JDK's class files:
+**Building the Android APK** — on this machine build-tools 34's `d8` crashes on the installed JDK's class files, so use 36 and JDK 21:
 ```
-cd mk-flix-app && sed 's#build-tools/34.0.0#build-tools/36.0.0#' build-apk.sh > .b.sh \
-  && ANDROID_HOME=~/Android/Sdk JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 bash .b.sh && rm .b.sh
+cd mk-flix-app && ANDROID_HOME=~/Android/Sdk BUILD_TOOLS_VERSION=36.0.0 \
+  JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 bash build-apk.sh
 ```
-Output: `app/build/outputs/apk/debug/app-debug.apk`. Android Studio/Gradle builds are unaffected.
+Output: `app/build/outputs/apk/debug/app-debug.apk` (debug-signed) and
+`app/build/manual/app-aligned.apk` (what `release/publish.mjs` signs).
+Android Studio/Gradle builds are unaffected.
+
+**Testing on the emulator** (`~/Android/Sdk/emulator`, AVDs `Pixel_7`,
+`Television_1080p`):
+- The app there is signed with Android Studio's debug key, not
+  `build-apk.sh`'s, so `adb install -r` of a script build fails. To update
+  it and keep the signed-in session, re-sign `app-aligned.apk` with
+  `apksigner sign --ks ~/.android/debug.keystore --ks-pass pass:android
+  --key-pass pass:android --ks-key-alias androiddebugkey`.
+- To drive the page directly, make a test build with
+  `WebView.setWebContentsDebuggingEnabled(true)` (never commit it), then
+  `adb forward tcp:9333 localabstract:webview_devtools_remote_<pid>` and
+  talk to `http://localhost:9333/json` over the DevTools protocol. Electron's
+  own Node has WebSocket: `ELECTRON_RUN_AS_NODE=1 npx electron script.js`.
+- Picture-in-picture switched off for the app:
+  `adb shell appops set com.mainakimani.blendyplay PICTURE_IN_PICTURE ignore`
+  (`allow` to undo).
 
 **Desktop:** `cd mk-flix-desktop && npm start` (or `npm run dist-win` / `dist-linux`).
 For local testing: `MKFLIX_API_BASE=http://localhost:8000/api npm start`.
@@ -615,6 +736,14 @@ For local testing: `MKFLIX_API_BASE=http://localhost:8000/api npm start`.
    `python manage.py shell -c "from billing.models import Plan as P; P.objects.filter(code='weekly').update(price=119); P.objects.filter(code='monthly').update(price=359)"`.
 
 ## Not done yet / next steps
+
+- **Deploy 1.7.2** with `~/Desktop/blendy-play-deploy/1.7.2/DEPLOY-1.7.2.md`.
+  The order matters: the backend `MIN_APP_VERSION_*` go to 1.7.2 before the
+  Daily plan is created. In its phone test, also try picture-in-picture
+  (the button, and Home mid-film), and check the screen stays on through a
+  few minutes of a film.
+- **Picture-in-picture on real devices:** a real phone (including
+  pinch-resizing), Android 8–11, and the desktop app with a real film.
 
 - **The customer whose emails didn't arrive:** Track Delivery in cPanel, then
   resend the receipt if needed (see "Latest sessions").
@@ -635,10 +764,12 @@ For local testing: `MKFLIX_API_BASE=http://localhost:8000/api npm start`.
 ## Caveats worth re-reading
 
 - The injected menu/lock scripts depend on **cinejoy.pk's real logged-in DOM**. They work today and stay defensive (they do nothing if they can't find their target); likely tuning points if cinejoy changes: the settings-submenu detection, the bottom-bar detection (`position: fixed` at the viewport bottom), and poster detection (`<img>`, not CSS backgrounds).
+- Picture-in-picture also depends on cinejoy's player markup (`.player-root`, the buttons' aria-labels, `.lp-subtitle`); see "Playback".
+- A film stuck at 0:00 may be the network, not the app: the office firewall intercepts some of cinejoy's video servers (see "Latest session").
 - Terms, emails and the portal describe Blendy Play as not hosting content. Imagery of the third-party site's films (posters, titles) belongs to its owners; check the rights before using it in marketing.
 - Charging for ad-free access to a third-party site may conflict with that site's own terms; have a lawyer look at this together with the Terms and Conditions.
 
 ## Where the raw session lives
 
-- Local transcripts (this machine), in `~/.claude/projects/-home-mk-dev-mk-flix/`: `01f7c073-67e5-47d5-8b14-f5a1d2d22235.jsonl` (the build-out) and `e7756eab-d8b0-46a7-bc93-1720d74eb355.jsonl` (2026-11-13 → 16: CORS, M-Pesa sandbox, gate fixes, rename, terms, email, portal and dashboard, email verification, forgot password, releases 1.5.0–1.6.0, outages and logging, devices, staff, live till payments, the email queue). On the same machine, `claude --resume` lists past sessions and `claude -c` continues the most recent.
+- Local transcripts (this machine), in `~/.claude/projects/-home-mk-dev-mk-flix/`: `01f7c073-67e5-47d5-8b14-f5a1d2d22235.jsonl` (the build-out) and `e7756eab-d8b0-46a7-bc93-1720d74eb355.jsonl` (2026-11-13 → 16: CORS, M-Pesa sandbox, gate fixes, rename, terms, email, portal and dashboard, email verification, forgot password, releases 1.5.0–1.6.0, outages and logging, devices, staff, live till payments, the email queue) and `fa2ed18c-23ce-440c-a5a4-2d72f54057fd.jsonl` (2026-11-24: the 1.7.2 rebuilds, the Chromecast check, picture-in-picture, screen on). On the same machine, `claude --resume` lists past sessions and `claude -c` continues the most recent.
 - On a different machine, this file + the three GitHub repos are the handoff.
