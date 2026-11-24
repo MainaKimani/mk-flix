@@ -495,6 +495,18 @@ public class MainActivity extends Activity {
         });
 
         chromeClient = new WebChromeClient() {
+            /**
+             * What a video shows before its first frame. The WebView's own is
+             * a grey play icon, which looked broken while a film loaded; a
+             * black picture matches the player around it.
+             */
+            @Override
+            public Bitmap getDefaultVideoPoster() {
+                Bitmap poster = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888);
+                poster.eraseColor(Color.BLACK);
+                return poster;
+            }
+
             @Override
             public void onShowCustomView(View view, CustomViewCallback callback) {
                 if (customView != null) {
