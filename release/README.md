@@ -75,6 +75,24 @@ hold the manifest's public key, and Android remembers the APK's signer.
    apps that don't check the manifest then get `426` from the API and show
    **Update required** too.
 
+## Releasing one platform only
+
+When only one app changed, release just that one and leave the others as
+they are. Download the live `releases.json` and `releases.json.sig` from
+`downloads/`, then bump only that app's version and build it:
+
+```sh
+node release/publish.mjs --notes "..." \
+  --keep windows --keep linux --previous path/to/releases.json
+```
+
+`--keep` copies a platform's entry from the live manifest unchanged, after
+checking its signature, so those apps see no update and their download
+still points at the older version's folder. **Don't delete that folder**
+in step 5: only remove the files of the platform you released. (`--skip`
+is different: it leaves the platform out of the manifest, and its
+download disappears from the website.)
+
 ## Windows without wine32
 
 electron-builder runs a 32-bit Windows program through Wine while it builds

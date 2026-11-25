@@ -19,10 +19,15 @@
 //   node release/publish.mjs --notes "Faster start-up" --notes "Fixes the TV remote"
 //                            [--min 1.5.0] [--min-android 1.5.0] [--min-windows ...] [--min-linux ...]
 //                            [--skip windows] [--date 2026-11-20]
+//                            [--keep windows --keep linux --previous path/to/live/releases.json]
 //
 // --min sets the oldest version still allowed to run on every platform;
 // anything older gets the "Update required" screen. Without it no update is
-// required. Secrets come from outside the repo: the manifest key
+// required. --keep releases one platform without the others: it carries the
+// kept platform's entry over unchanged from the live manifest (--previous,
+// checked against its .sig next to it), so its apps and its download stay as
+// they are. --skip instead leaves a platform out of the manifest entirely.
+// Secrets come from outside the repo: the manifest key
 // (BLENDY_MANIFEST_KEY, default ~/.config/blendy-release/manifest-signing-key.pem)
 // and the Android keystore settings in ~/.gradle/gradle.properties.
 import { spawnSync } from 'node:child_process';
@@ -72,7 +77,7 @@ function fail(message) {
 }
 
 function parseArgs(argv) {
-  const out = { notes: [], skip: [], min: {} };
+  const out = { notes: [], skip: [], keep: [], min: {} };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const next = () => {
@@ -82,6 +87,8 @@ function parseArgs(argv) {
     };
     if (a === '--notes') out.notes.push(next());
     else if (a === '--skip') out.skip.push(next());
+    else if (a === '--keep') out.keep.push(next());
+    else if (a === '--previous') out.previous = next();
     else if (a === '--min') { const v = next(); out.min.android = out.min.windows = out.min.linux = v; }
     else if (a.startsWith('--min-')) out.min[a.slice(6)] = next();
     else if (a === '--date') out.date = next();
@@ -156,12 +163,17 @@ function signApk(source, dest, version, versionCode) {
 
 function main() {
   const args = parseArgs(process.argv.slice(2));
-  const version = JSON.parse(fs.readFileSync(path.join(DESKTOP, 'package.json'), 'utf8')).version;
+  const desktopVersion = JSON.parse(fs.readFileSync(path.join(DESKTOP, 'package.json'), 'utf8')).version;
   const androidVersion = gradleValue('versionName');
   const versionCode = parseInt(gradleValue('versionCode'), 10);
-  if (androidVersion !== version) {
-    fail(`Versions differ: desktop ${version}, Android ${androidVersion}. Bump both to the same version.`);
+  const built = (key) => !args.skip.includes(key) && !args.keep.includes(key);
+  const androidBuilt = built('android');
+  const desktopBuilt = built('windows') || built('linux');
+  if (androidBuilt && desktopBuilt && androidVersion !== desktopVersion) {
+    fail(`Versions differ: desktop ${desktopVersion}, Android ${androidVersion}. Bump both to the same version.`);
   }
+  // The manifest's version is the release's: that of what is built this time.
+  const version = androidBuilt ? androidVersion : desktopVersion;
 
   const keyFile = process.env.BLENDY_MANIFEST_KEY
     || path.join(os.homedir(), '.config', 'blendy-release', 'manifest-signing-key.pem');
@@ -171,6 +183,17 @@ function main() {
   const keyBody = publicKey.split('\n').filter((l) => !l.startsWith('-----')).join('');
   if (!updaterSource.replace(/\s/g, '').includes(keyBody)) {
     fail('mk-flix-desktop/updater.js has a different public key than release/manifest-public-key.pem');
+  }
+
+  let previous = null;
+  if (args.keep.length) {
+    if (!args.previous) fail('--keep needs --previous: the live releases.json, with its .sig next to it');
+    const prevBody = fs.readFileSync(args.previous);
+    const prevSig = Buffer.from(fs.readFileSync(`${args.previous}.sig`, 'utf8').trim(), 'base64');
+    if (!crypto.verify('sha256', prevBody, { key: publicKey, dsaEncoding: 'der' }, prevSig)) {
+      fail(`${args.previous} does not match its signature: download both files again from the server`);
+    }
+    previous = JSON.parse(prevBody.toString('utf8'));
   }
 
   const outRoot = path.resolve(args.out || path.join(HERE, 'out', 'downloads'));
@@ -187,6 +210,13 @@ function main() {
   const platforms = {};
   for (const [key, a] of Object.entries(artifacts)) {
     if (args.skip.includes(key)) { console.log(`- ${key}: skipped`); continue; }
+    if (args.keep.includes(key)) {
+      const entry = previous.platforms && previous.platforms[key];
+      if (!entry) fail(`--keep ${key}: the previous manifest has no ${key} entry`);
+      platforms[key] = entry;
+      console.log(`= ${key}: kept at ${entry.version} (${entry.file})`);
+      continue;
+    }
     if (!fs.existsSync(a.src)) fail(`${key}: ${a.src} not found. Build it first, or pass --skip ${key}.`);
     const dest = path.join(outDir, a.name);
     if (key === 'android') signApk(a.src, dest, version, versionCode);
