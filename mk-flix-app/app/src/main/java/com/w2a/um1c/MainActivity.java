@@ -452,6 +452,9 @@ public class MainActivity extends Activity {
                 // WebView and rebuild the activity; onCreate then shows the
                 // error screen (renderCrashRecovery) instead of a white page.
                 renderCrashRecovery = true;
+                // This screen is about to be rebuilt: its pending splash
+                // timeout would otherwise fire on it after the WebView is gone.
+                view.removeCallbacks(splashTimeout);
                 try {
                     ViewGroup parent = (ViewGroup) view.getParent();
                     if (parent != null) {
@@ -799,7 +802,9 @@ public class MainActivity extends Activity {
         final ObjectAnimator pulse = splashPulse;
         splash = null;
         splashPulse = null;
-        webView.removeCallbacks(splashTimeout);
+        if (webView != null) {
+            webView.removeCallbacks(splashTimeout);
+        }
         long wait = Math.max(0, splashMinMs - (SystemClock.uptimeMillis() - splashShownAt));
         leaving.animate().alpha(0f).setStartDelay(wait).setDuration(450)
                 .withEndAction(() -> {
