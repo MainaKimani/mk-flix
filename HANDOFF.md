@@ -84,6 +84,12 @@ app never creates accounts by itself.
   firewall's certificate and the player spins at 0:00 forever. Films from
   `lightspeed.st` play. A film that won't start at the office isn't
   necessarily a bug: try mobile data.
+- **A hand-edited manifest broke in-app updates.** The install text in the
+  live 1.7.2 `releases.json` was edited on the server, which broke its
+  signature, so TV and desktop offered only "download from the website".
+  The phone had checked before the edit. The edited file was re-signed as
+  it was, and the live pair verifies again. `publish.mjs` now has the same
+  wording (`6af144c`). See "Releases and in-app updates".
 
 ## Playback: picture-in-picture and screen on
 
@@ -631,6 +637,18 @@ backend). Step-by-step guide: `mk-flix-be/DEPLOY.md`.
   `updater.js`, `AppUpdater.java`); downloads must match the manifest's
   SHA-256; Android also checks package name, newer versionCode and the same
   signing certificate. Plain http only for `localhost` testing.
+- **Never edit `releases.json` on the server without re-signing it.** The
+  signature covers every byte, so even a wording change makes every app's
+  check fail. The gate treats a failed check as "unknown": it shows
+  "This version of Blendy Play is no longer supported" with only the
+  website link and no Update now, on every platform. Change the text in
+  `release/publish.mjs` (`PLATFORM_TEXT`) and publish from there. Or, to
+  keep an edited file, sign it as it is with the signing key
+  (`crypto.sign('sha256', body, { key, dsaEncoding: 'der' })`, base64,
+  trailing newline) and upload the new `releases.json.sig` with it. To
+  check the live pair: download both, `base64 -d` the `.sig`, then
+  `openssl dgst -sha256 -verify <public key> -signature <der>
+  releases.json`. The public key is `release/manifest-public-key.pem`.
 - **Gate:** at launch (at most 6 s, once per app start) it asks the native side
   for the update state: **Update available** (Update now / Later; Later hides
   it for 24 h) or **Update required** (version below the manifest's
