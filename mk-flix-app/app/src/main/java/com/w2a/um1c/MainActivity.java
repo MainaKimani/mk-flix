@@ -197,22 +197,55 @@ public class MainActivity extends Activity {
     // recreate() that rebuilds the activity, where onCreate reads it to show
     // the error screen instead of reloading the page that crashed.
     private static boolean renderCrashRecovery;
+    // Page that was open when the renderer died, reloaded by onCreate.
+    private static String renderCrashUrl;
+    // A failed page is retried this many times behind the splash before the
+    // error screen shows. Old TVs and low-memory phones often load a page on
+    // the second try (the crashed renderer's memory is back, a stalled
+    // connection is reopened). Each Retry tap on the error screen gets the
+    // same number again.
+    private static final int SILENT_RETRIES = 2;
+    // Wait before silent retry 1 and 2, so memory and the network can recover.
+    private static final long[] SILENT_RETRY_DELAY_MS = {1000, 3000};
+    // Page being retried silently and how many retries it has had. Static so
+    // the count survives the recreate() after a renderer crash; otherwise a
+    // page that always crashes the renderer would retry forever.
+    private static String silentRetryUrl;
+    private static int silentRetryCount;
+    // When the page being retried last drew its content (uptime ms), or 0.
+    // Its count starts afresh only once it has stayed up SILENT_RETRY_OK_MS,
+    // so a page that draws from cache and then fails again straight away
+    // can't keep the retries going forever.
+    private static long silentRetryWorkedAt;
+    private static final long SILENT_RETRY_OK_MS = 10000;
+    // The silent retry waiting to run, so it can be called off.
+    private Runnable pendingSilentRetry;
+    // Network errors worth retrying: a stalled or dropped connection, a
+    // flaky DNS lookup. Not offline (the error screen retries by itself on
+    // reconnect) and not certificate errors (a firewall won't change its mind).
+    private static final java.util.regex.Pattern TRANSIENT_NET_ERROR = java.util.regex.Pattern.compile(
+            "TIMED_OUT|CONNECTION_(RESET|CLOSED|ABORTED|FAILED|REFUSED)|EMPTY_RESPONSE"
+                    + "|NETWORK_CHANGED|NAME_NOT_RESOLVED|HTTP2_|QUIC_");
     // At startup it's shown at least this long, so it reads as an intro
     // rather than a flicker. The hand-off splash has no minimum.
     private static final long SPLASH_MIN_MS = 3000;
     // Taken down after this long even if the page is still loading, so a
     // slow network shows the site's own progress instead of a stuck splash.
     private static final long SPLASH_MAX_MS = 15000;
-    // True once the site has drawn its content: a section heading or a
+    // 'site' once the site has drawn its content: a section heading or a
     // video, and an image loaded on screen. Until then it shows only its
-    // dark green background. Also true for any page that isn't the site.
+    // dark green background (false). 'other' for any page that isn't the
+    // site, which has nothing to wait for. The WebView's own network error
+    // page (chrome-error:) is false: it stands in for a failed page that is
+    // about to be retried or replaced.
     private static final String CONTENT_READY_JS = "(function(){"
-            + "if(!/(^|\\.)cinejoy\\.pk$/.test(location.hostname))return true;"
+            + "if(location.protocol==='chrome-error:')return false;"
+            + "if(!/(^|\\.)cinejoy\\.pk$/.test(location.hostname))return 'other';"
             + "function vis(e){var r=e.getBoundingClientRect();return r.width>0&&r.height>0"
             + "&&r.top<innerHeight&&r.bottom>0&&getComputedStyle(e).visibility!=='hidden';}"
             + "var text=[].some.call(document.querySelectorAll('h1,h2,video'),vis);"
             + "var img=[].some.call(document.images,function(i){return i.complete&&i.naturalWidth>0&&vis(i);});"
-            + "return text&&img;})()";
+            + "return text&&img?'site':false;})()";
     // True when a cinejoy.pk page looks blank: its body has almost no text and
     // no loaded image. A device too low on memory, or with a browser too old
     // for the site, can load the HTML but fail to render it, leaving a white
@@ -426,6 +459,16 @@ public class MainActivity extends Activity {
                         || desc.contains("ERR_ABORTED") || sameUrl(url, sslFailedUrl)) {
                     return;
                 }
+                // A passing network fault on a cinejoy.pk page: reload it
+                // behind the splash first. The splash covers the WebView's
+                // own error page, and stays until the site draws its content.
+                if (isCineJoyUrl(url) && TRANSIENT_NET_ERROR.matcher(desc).find()) {
+                    long delay = takeSilentRetry(url);
+                    if (delay >= 0) {
+                        retrySilently(url, delay);
+                        return;
+                    }
+                }
                 showErrorPage(url, error.getErrorCode(), desc);
             }
 
@@ -452,6 +495,7 @@ public class MainActivity extends Activity {
                 // WebView and rebuild the activity; onCreate then shows the
                 // error screen (renderCrashRecovery) instead of a white page.
                 renderCrashRecovery = true;
+                renderCrashUrl = pageUrl;
                 // This screen is about to be rebuilt: its pending splash
                 // timeout would otherwise fire on it after the WebView is gone.
                 view.removeCallbacks(splashTimeout);
@@ -638,11 +682,21 @@ public class MainActivity extends Activity {
         });
 
         if (renderCrashRecovery) {
-            // Rebuilt after a renderer crash: don't restore the page that
-            // crashed — show the error screen with a device-specific message.
+            // Rebuilt after a renderer crash. Don't restore the WebView state
+            // (that would reopen the page mid-crash); load the page afresh
+            // behind the splash, up to SILENT_RETRIES times, then show the
+            // error screen with a device-specific message.
             renderCrashRecovery = false;
-            errorPageFailedUrl = HOME_URL;
-            webView.loadUrl(ERROR_PAGE + "?url=" + Uri.encode(HOME_URL) + "&desc=BLENDY_RENDERER_GONE");
+            String crashed = renderCrashUrl;
+            renderCrashUrl = null;
+            String target = isCineJoyUrl(crashed)
+                    || (crashed != null && crashed.startsWith(ACCOUNT_PAGE)) ? crashed : HOME_URL;
+            long delay = takeSilentRetry(target);
+            if (delay >= 0) {
+                retrySilently(target, delay);
+            } else {
+                showErrorPage(target, 0, "BLENDY_RENDERER_GONE");
+            }
         } else if (savedInstanceState != null) {
             webView.restoreState(savedInstanceState);
         } else {
@@ -754,11 +808,26 @@ public class MainActivity extends Activity {
                 }
                 final Runnable again = this;
                 webView.evaluateJavascript(CONTENT_READY_JS, value -> {
-                    if ("true".equals(value) || splash == null) {
+                    // Answers are JSON: "site" / "other" in quotes.
+                    boolean site = "\"site\"".equals(value);
+                    // While a failed page waits for a silent retry, the
+                    // WebView may still hold the page before it (the gate,
+                    // the error screen), which isn't the site: keep waiting.
+                    boolean other = "\"other\"".equals(value) && pendingSilentRetry == null
+                            && (silentRetryCount == 0 || silentRetryWorkedAt > 0);
+                    if (site) {
+                        // The page works (a retry can be beaten by the page
+                        // loading itself again): drop any retry still waiting.
+                        cancelSilentRetry();
+                        silentRetryWorkedAt = SystemClock.uptimeMillis();
+                    }
+                    if (site || other || splash == null) {
                         watchingForContent = false;
                         dismissSplash();
-                    } else {
+                    } else if (webView != null) {
                         webView.postDelayed(again, 250);
+                    } else {
+                        watchingForContent = false;
                     }
                 });
             }
@@ -822,9 +891,10 @@ public class MainActivity extends Activity {
      * The splash has been up the maximum time. Normally we take it down so a
      * slow-but-working site shows its own loading UI. But if we're on
      * cinejoy.pk and it still hasn't drawn anything (PAGE_BLANK_JS), the page
-     * is blank — show the error screen instead of revealing a white page. The
-     * error page's own onPageFinished then takes the splash down, so there's
-     * no flash of white in between.
+     * is blank. Load it again behind the splash (up to SILENT_RETRIES times,
+     * each with another SPLASH_MAX_MS to draw), then show the error screen
+     * instead of revealing a white page. The error page's own onPageFinished
+     * takes the splash down, so there's no flash of white in between.
      */
     private void onSplashTimeout() {
         if (splash == null || webView == null || !isCineJoyUrl(pageUrl)) {
@@ -833,11 +903,16 @@ public class MainActivity extends Activity {
         }
         final String blankUrl = pageUrl;
         webView.evaluateJavascript(PAGE_BLANK_JS, value -> {
-            if ("true".equals(value) && webView != null) {
-                errorPageFailedUrl = blankUrl;
-                webView.loadUrl(ERROR_PAGE + "?url=" + Uri.encode(blankUrl) + "&desc=BLENDY_BLANK");
-            } else {
+            if (!"true".equals(value) || webView == null) {
                 dismissSplash();
+                return;
+            }
+            long delay = takeSilentRetry(blankUrl);
+            if (delay >= 0) {
+                webView.stopLoading();
+                retrySilently(blankUrl, delay);
+            } else {
+                showErrorPage(blankUrl, 0, "BLENDY_BLANK");
             }
         });
     }
@@ -1338,10 +1413,65 @@ public class MainActivity extends Activity {
      */
     private void showErrorPage(String failedUrl, int code, String desc) {
         errorPageFailedUrl = failedUrl;
+        cancelSilentRetry();
+        // The user's Retry tap gets its own silent retries.
+        silentRetryUrl = null;
+        silentRetryCount = 0;
+        silentRetryWorkedAt = 0;
         String page = ERROR_PAGE + "?url=" + Uri.encode(failedUrl)
                 + "&code=" + code + "&desc=" + Uri.encode(desc);
         // Posted so the WebView finishes handling the failure first.
         webView.post(() -> webView.loadUrl(page));
+    }
+
+    /**
+     * Reload a failed page after {@code delay} ms behind the splash, giving
+     * it a fresh SPLASH_MAX_MS to draw. Replaces any retry still waiting.
+     */
+    private void retrySilently(String url, long delay) {
+        showSplash(0);
+        cancelSilentRetry();
+        pendingSilentRetry = () -> {
+            pendingSilentRetry = null;
+            if (webView == null) {
+                return;
+            }
+            webView.loadUrl(url);
+            if (splash != null) {
+                webView.removeCallbacks(splashTimeout);
+                webView.postDelayed(splashTimeout, SPLASH_MAX_MS);
+            }
+        };
+        webView.postDelayed(pendingSilentRetry, delay);
+    }
+
+    private void cancelSilentRetry() {
+        if (pendingSilentRetry != null && webView != null) {
+            webView.removeCallbacks(pendingSilentRetry);
+        }
+        pendingSilentRetry = null;
+    }
+
+    /**
+     * Claim a silent retry for a failed page. A different page from the one
+     * last retried starts a fresh count, and so does the same page once it
+     * has worked for SILENT_RETRY_OK_MS since its last retry.
+     *
+     * @return how long to wait before reloading it, or -1 when its silent
+     *         retries are used up and the error screen should show
+     */
+    private static long takeSilentRetry(String url) {
+        boolean workedSince = silentRetryWorkedAt > 0
+                && SystemClock.uptimeMillis() - silentRetryWorkedAt >= SILENT_RETRY_OK_MS;
+        if (!sameUrl(url, silentRetryUrl) || workedSince) {
+            silentRetryUrl = url;
+            silentRetryCount = 0;
+        }
+        silentRetryWorkedAt = 0;
+        if (silentRetryCount >= SILENT_RETRIES) {
+            return -1;
+        }
+        return SILENT_RETRY_DELAY_MS[silentRetryCount++];
     }
 
     private static boolean isErrorPage(String url) {
