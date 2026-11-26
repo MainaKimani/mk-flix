@@ -23,3 +23,6 @@ Thumbs.db
 
 # Release tool output (signed APK, installers, manifest)
 release/out/
+
+# Browser extension build output
+mk-flix-extension/dist/
